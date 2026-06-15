@@ -1,0 +1,263 @@
+"""Storage SQLite — unico modulo che tocca la persistenza.
+
+Isolando qui tutto l'accesso ai dati, in futuro si potrà introdurre una
+sincronizzazione (file su cloud o server) sostituendo/affiancando questo
+modulo senza modificare la logica di business.
+
+Scelte pro-sync futura:
+- chiavi primarie UUID testuali (niente collisioni tra dispositivi);
+- colonne created_at/updated_at (ISO 8601) e deleted (soft-delete).
+
+Gli importi sono salvati come TEXT e riletti come Decimal per fedeltà.
+"""
+
+from __future__ import annotations
+
+import os
+import sqlite3
+import uuid
+from datetime import datetime, timezone
+from decimal import Decimal
+from pathlib import Path
+from typing import Optional
+
+from .models import Expense, Participant, Split, Trip
+
+DEFAULT_DB_PATH = Path.home() / ".diviconto" / "diviconto.db"
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS trips (
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    description   TEXT NOT NULL DEFAULT '',
+    base_currency TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL,
+    deleted       INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS participants (
+    id         TEXT PRIMARY KEY,
+    trip_id    TEXT NOT NULL REFERENCES trips(id),
+    name       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted    INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS expenses (
+    id           TEXT PRIMARY KEY,
+    trip_id      TEXT NOT NULL REFERENCES trips(id),
+    payer_id     TEXT NOT NULL REFERENCES participants(id),
+    amount       TEXT NOT NULL,
+    currency     TEXT NOT NULL,
+    rate_to_base TEXT NOT NULL,
+    amount_base  TEXT NOT NULL,
+    description  TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL,
+    deleted      INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS splits (
+    id              TEXT PRIMARY KEY,
+    expense_id      TEXT NOT NULL REFERENCES expenses(id),
+    participant_id  TEXT NOT NULL REFERENCES participants(id),
+    mode            TEXT NOT NULL,
+    share_base      TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    deleted         INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_participants_trip ON participants(trip_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_trip ON expenses(trip_id);
+CREATE INDEX IF NOT EXISTS idx_splits_expense ON splits(expense_id);
+"""
+
+
+def now_iso() -> str:
+    """Timestamp corrente in ISO 8601 UTC."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def new_id() -> str:
+    return str(uuid.uuid4())
+
+
+def resolve_db_path(path: Optional[str] = None) -> Path:
+    """Determina il percorso del DB: argomento > env DIVICONTO_DB > default."""
+    if path:
+        return Path(path).expanduser()
+    env = os.environ.get("DIVICONTO_DB")
+    if env:
+        return Path(env).expanduser()
+    return DEFAULT_DB_PATH
+
+
+class Database:
+    """Wrapper sottile su SQLite con i metodi CRUD del dominio."""
+
+    def __init__(self, path: Optional[str] = None):
+        self.path = resolve_db_path(path)
+        if str(self.path) != ":memory:":
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(str(self.path))
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        self.conn.executescript(SCHEMA)
+        self.conn.commit()
+
+    def close(self) -> None:
+        self.conn.close()
+
+    def __enter__(self) -> "Database":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
+    # ---- Trip -------------------------------------------------------------
+    def add_trip(self, name: str, base_currency: str, description: str = "") -> Trip:
+        ts = now_iso()
+        trip = Trip(
+            id=new_id(),
+            name=name,
+            base_currency=base_currency,
+            description=description,
+            created_at=ts,
+            updated_at=ts,
+        )
+        self.conn.execute(
+            "INSERT INTO trips (id, name, description, base_currency, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (trip.id, trip.name, trip.description, trip.base_currency, ts, ts),
+        )
+        self.conn.commit()
+        return trip
+
+    def list_trips(self) -> list[Trip]:
+        rows = self.conn.execute(
+            "SELECT * FROM trips WHERE deleted = 0 ORDER BY created_at"
+        ).fetchall()
+        return [self._row_to_trip(r) for r in rows]
+
+    def get_trip(self, ref: str) -> Optional[Trip]:
+        """Cerca un viaggio per id esatto oppure per nome (case-insensitive)."""
+        row = self.conn.execute(
+            "SELECT * FROM trips WHERE deleted = 0 AND id = ?", (ref,)
+        ).fetchone()
+        if row:
+            return self._row_to_trip(row)
+        rows = self.conn.execute(
+            "SELECT * FROM trips WHERE deleted = 0 AND name = ? COLLATE NOCASE", (ref,)
+        ).fetchall()
+        if len(rows) == 1:
+            return self._row_to_trip(rows[0])
+        if len(rows) > 1:
+            raise ValueError(
+                f"più viaggi con nome {ref!r}: usa l'id per disambiguare"
+            )
+        return None
+
+    # ---- Participant ------------------------------------------------------
+    def add_participant(self, trip_id: str, name: str) -> Participant:
+        ts = now_iso()
+        p = Participant(id=new_id(), trip_id=trip_id, name=name, created_at=ts, updated_at=ts)
+        self.conn.execute(
+            "INSERT INTO participants (id, trip_id, name, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (p.id, p.trip_id, p.name, ts, ts),
+        )
+        self.conn.commit()
+        return p
+
+    def list_participants(self, trip_id: str) -> list[Participant]:
+        rows = self.conn.execute(
+            "SELECT * FROM participants WHERE deleted = 0 AND trip_id = ? ORDER BY created_at",
+            (trip_id,),
+        ).fetchall()
+        return [self._row_to_participant(r) for r in rows]
+
+    def get_participant_by_name(self, trip_id: str, name: str) -> Optional[Participant]:
+        row = self.conn.execute(
+            "SELECT * FROM participants WHERE deleted = 0 AND trip_id = ? "
+            "AND name = ? COLLATE NOCASE",
+            (trip_id, name),
+        ).fetchone()
+        return self._row_to_participant(row) if row else None
+
+    # ---- Expense ----------------------------------------------------------
+    def add_expense(self, expense: Expense) -> Expense:
+        ts = now_iso()
+        expense.created_at = ts
+        expense.updated_at = ts
+        with self.conn:  # transazione: spesa + quote insieme
+            self.conn.execute(
+                "INSERT INTO expenses (id, trip_id, payer_id, amount, currency, "
+                "rate_to_base, amount_base, description, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    expense.id, expense.trip_id, expense.payer_id,
+                    str(expense.amount), expense.currency, str(expense.rate_to_base),
+                    str(expense.amount_base), expense.description, ts, ts,
+                ),
+            )
+            for s in expense.splits:
+                self.conn.execute(
+                    "INSERT INTO splits (id, expense_id, participant_id, mode, "
+                    "share_base, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (s.id, s.expense_id, s.participant_id, s.mode, str(s.share_base), ts, ts),
+                )
+        return expense
+
+    def list_expenses(self, trip_id: str) -> list[Expense]:
+        rows = self.conn.execute(
+            "SELECT * FROM expenses WHERE deleted = 0 AND trip_id = ? ORDER BY created_at",
+            (trip_id,),
+        ).fetchall()
+        expenses = []
+        for r in rows:
+            exp = self._row_to_expense(r)
+            exp.splits = self._splits_for(exp.id)
+            expenses.append(exp)
+        return expenses
+
+    def _splits_for(self, expense_id: str) -> list[Split]:
+        rows = self.conn.execute(
+            "SELECT * FROM splits WHERE deleted = 0 AND expense_id = ?", (expense_id,)
+        ).fetchall()
+        return [
+            Split(
+                id=r["id"],
+                expense_id=r["expense_id"],
+                participant_id=r["participant_id"],
+                mode=r["mode"],
+                share_base=Decimal(r["share_base"]),
+            )
+            for r in rows
+        ]
+
+    # ---- row mappers ------------------------------------------------------
+    @staticmethod
+    def _row_to_trip(r: sqlite3.Row) -> Trip:
+        return Trip(
+            id=r["id"], name=r["name"], base_currency=r["base_currency"],
+            description=r["description"], created_at=r["created_at"], updated_at=r["updated_at"],
+        )
+
+    @staticmethod
+    def _row_to_participant(r: sqlite3.Row) -> Participant:
+        return Participant(
+            id=r["id"], trip_id=r["trip_id"], name=r["name"],
+            created_at=r["created_at"], updated_at=r["updated_at"],
+        )
+
+    @staticmethod
+    def _row_to_expense(r: sqlite3.Row) -> Expense:
+        return Expense(
+            id=r["id"], trip_id=r["trip_id"], payer_id=r["payer_id"],
+            amount=Decimal(r["amount"]), currency=r["currency"],
+            rate_to_base=Decimal(r["rate_to_base"]), amount_base=Decimal(r["amount_base"]),
+            description=r["description"], created_at=r["created_at"], updated_at=r["updated_at"],
+        )

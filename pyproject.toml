@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "diviconto"
+version = "0.1.0"
+description = "Dividi le spese di un viaggio tra amici (CLI, solo libreria standard)"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []  # solo libreria standard, nessuna dipendenza esterna
+
+[project.scripts]
+diviconto = "diviconto.cli:main"
+
+[tool.setuptools]
+packages = ["diviconto"]
