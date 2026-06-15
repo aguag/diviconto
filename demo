@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Demo a vuoto di DiviConto: crea un viaggio d'esempio in un DB temporaneo,
+# mostra spese e bilancio, poi cancella tutto. Non tocca il DB reale.
+#
+# Uso: ./demo
+set -euo pipefail
+
+cd "$(dirname "$(readlink -f "$0")")"
+
+# DB temporaneo usa-e-getta, rimosso all'uscita (anche in caso di errore)
+DEMO_DB="$(mktemp --suffix=.diviconto.db)"
+trap 'rm -f "$DEMO_DB"' EXIT
+export DIVICONTO_DB="$DEMO_DB"
+
+run() {
+    echo "\$ divc $*"
+    ./divc "$@"
+    echo
+}
+
+echo "### Demo DiviConto (DB temporaneo: $DEMO_DB)"
+echo
+
+run trip create --name "Spagna" --currency EUR --desc "Viaggio estivo"
+run person add --trip Spagna --name Anna
+run person add --trip Spagna --name Bob
+run person add --trip Spagna --name Cleo
+
+# Cena 120 EUR divisa in parti uguali tra tutti
+run expense add --trip Spagna --payer Anna --amount 120 --desc Cena --split equal
+
+# Benzina pagata in USD: serve il tasso verso la valuta base
+run expense add --trip Spagna --payer Bob --amount 50 --currency USD --rate 0.92 \
+    --desc Benzina --split equal
+
+# Hotel diviso con importi esatti (nella valuta della spesa)
+run expense add --trip Spagna --payer Cleo --amount 90 --desc Hotel \
+    --split "exact:Anna=30,Bob=30,Cleo=30"
+
+echo "### Spese registrate"
+run expense list --trip Spagna
+
+echo "### Bilancio finale"
+run balance --trip Spagna
+
+echo "### Fine demo — il DB temporaneo viene cancellato automaticamente."

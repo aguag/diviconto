@@ -20,6 +20,17 @@ python -m diviconto -h     # equivalente
 
 Help di ogni sottocomando con `-h`, es. `./divc expense add -h`.
 
+### Demo (prova a vuoto)
+
+Per vedere il programma in azione senza toccare il tuo database reale:
+
+```bash
+./demo
+```
+
+Crea un viaggio d'esempio in un **DB temporaneo**, mostra spese e bilancio, poi
+cancella tutto automaticamente.
+
 ### Esempio completo
 
 ```bash
@@ -45,6 +56,25 @@ Help di ogni sottocomando con `-h`, es. `./divc expense add -h`.
 ## Posizione del database
 Default: `~/.diviconto/diviconto.db`. Si può cambiare con `--db PATH`
 oppure con la variabile d'ambiente `DIVICONTO_DB`.
+
+### Provare a vuoto (senza toccare il DB reale)
+Usa un database temporaneo, poi cancellalo:
+
+```bash
+# opzione per comando
+./divc --db /tmp/prova.db trip create --name Test --currency EUR
+# ... altri comandi ...
+rm /tmp/prova.db
+
+# oppure via variabile d'ambiente (vale solo nel terminale corrente)
+export DIVICONTO_DB="$(mktemp --suffix=.db)"
+./divc trip create --name Test --currency EUR
+# ... altri comandi ...
+rm -f "$DIVICONTO_DB" && unset DIVICONTO_DB
+```
+
+Su Android/Termux usa un percorso scrivibile, es. `$HOME/prova.db`.
+Lo script `./demo` fa esattamente questo in automatico.
 
 ## Criteri di divisione
 - `equal` — parti uguali tra tutti i partecipanti
