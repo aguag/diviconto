@@ -96,5 +96,5 @@ l'importo della spesa e i netti sommano a zero.
 - `test_cli.py` — flusso end-to-end via `subprocess`
 
 ```bash
-python -m unittest discover -s tests
+./run-tests        # oppure: make test, oppure: python -m unittest discover -s tests
 ```

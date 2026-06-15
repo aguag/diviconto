@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Lancia la suite di test di DiviConto.
+# Uso:
+#   ./run-tests           # tutti i test
+#   ./run-tests -v        # output dettagliato
+#   ./run-tests tests.test_core   # solo un modulo/classe/test
+set -euo pipefail
+
+cd "$(dirname "$(readlink -f "$0")")"
+
+if [ "$#" -eq 0 ]; then
+    exec python -m unittest discover -s tests
+else
+    exec python -m unittest "$@"
+fi

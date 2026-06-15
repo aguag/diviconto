@@ -69,7 +69,13 @@ diviconto -h
 
 ## Test
 ```bash
-python -m unittest discover -s tests
+./run-tests              # tutti i test
+./run-tests -v           # output dettagliato
+./run-tests tests.test_core   # solo un modulo/classe/test
+
+make test                # equivalente con make (make test-v per il dettaglio)
+
+python -m unittest discover -s tests   # comando diretto (anche su Termux)
 ```
 
 ## Architettura
