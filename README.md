@@ -91,7 +91,56 @@ calcolato nella valuta base.
 `balance` mostra, per ogni persona, quanto ha **pagato**, quanto **doveva** e
 il **saldo netto**, più i **pagamenti minimi** suggeriti per pareggiare i conti.
 
-## Installazione (opzionale)
+## Interfaccia grafica (UI)
+
+Oltre alla CLI c'è una UI grafica (**Kivy + KivyMD**) che riusa lo stesso core
+e gira su **Linux** e su **Android** (APK). Le dipendenze UI sono separate dalla
+CLI (la CLI resta a sola libreria standard).
+
+### Avvio su Linux
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-ui.txt    # oppure: pip install -e ".[ui]"
+python main.py
+```
+
+La UI offre: elenco/creazione viaggi, gestione partecipanti, inserimento spese
+(parti uguali o importi esatti, multi-valuta con tasso) e schermata bilancio con
+saldi e pagamenti suggeriti. Il database è in `~/.config/diviconto/diviconto.db`
+(cartella dati dell'app, valida anche su Android).
+
+### Build dell'APK Android
+
+L'APK si costruisce con **Buildozer**. Due strade:
+
+**A) Docker (consigliata)** — nessuna dipendenza da installare sul sistema,
+serve solo Docker attivo:
+```bash
+make apk            # = docker run … kivy/buildozer android debug
+# l'APK risultante è in bin/  (es. diviconto-0.1.0-...-debug.apk)
+make apk-clean      # svuota la cache .buildozer/ per un build pulito
+```
+Il primo build scarica SDK/NDK (~1.5 GB, lungo); i successivi sono veloci grazie
+alla cache in `.buildozer/`. Nota: il comando accetta automaticamente le licenze
+SDK (`yes |` + `-i`), altrimenti il build fallisce con "aidl not found".
+
+**B) Build nativo su host Fedora** — prerequisiti di sistema (una volta sola):
+```bash
+sudo dnf install -y java-17-openjdk-devel autoconf automake libtool \
+    cmake ccache gcc gcc-c++ make patch zip unzip which file \
+    zlib-devel ncurses-devel libffi-devel openssl-devel
+pip install buildozer Cython
+buildozer -v android debug
+```
+
+L'icona dell'app si rigenera con `python tools/make_icon.py`.
+La configurazione del build è in [buildozer.spec](buildozer.spec).
+
+### Installare l'APK sul telefono
+Copia il file da `bin/` sul telefono e aprilo (abilita "origini sconosciute"),
+oppure via `adb install bin/diviconto-*-debug.apk`.
+
+## Installazione CLI (opzionale)
 ```bash
 pip install --user .
 diviconto -h
@@ -113,8 +162,12 @@ python -m unittest discover -s tests   # comando diretto (anche su Termux)
 - `diviconto/models.py` — dataclasses del dominio
 - `diviconto/db.py` — storage SQLite (unico punto di persistenza)
 - `diviconto/balance.py` — saldi netti + pagamenti di pareggio
-- `diviconto/core.py` — logica di business (riusabile dalla futura UI)
+- `diviconto/core.py` — logica di business (riusata da CLI e UI)
 - `diviconto/cli.py` — interfaccia a riga di comando
+- `ui/` — interfaccia grafica Kivy/KivyMD (solo presentazione; richiama `core`)
+- `main.py` — entry point della UI; `buildozer.spec` — build Android
 
-I prossimi passi previsti: UI (Kivy/BeeWare per Android), sincronizzazione
-del DB, divisione per percentuale/quote.
+Dettagli tecnici in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md).
+
+I prossimi passi previsti: modifica/cancellazione di spese dalla UI,
+sincronizzazione del DB tra dispositivi, divisione per percentuale/quote.

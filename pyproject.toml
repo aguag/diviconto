@@ -8,10 +8,17 @@ version = "0.1.0"
 description = "Dividi le spese di un viaggio tra amici (CLI, solo libreria standard)"
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = []  # solo libreria standard, nessuna dipendenza esterna
+dependencies = []  # core: solo libreria standard, nessuna dipendenza esterna
+
+[project.optional-dependencies]
+# UI grafica (Kivy/KivyMD). Installa con:  pip install -e ".[ui]"
+ui = [
+    "kivy==2.3.1",
+    "kivymd==1.2.0",
+]
 
 [project.scripts]
 diviconto = "diviconto.cli:main"
 
 [tool.setuptools]
-packages = ["diviconto"]
+packages = ["diviconto", "ui", "ui.screens"]

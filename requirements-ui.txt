@@ -1,0 +1,4 @@
+# Dipendenze della UI (NON necessarie per la CLI, che usa solo la stdlib).
+# Versioni fissate per stabilità del binomio Kivy/KivyMD e del build Android.
+kivy==2.3.1
+kivymd==1.2.0

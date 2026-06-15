@@ -1,0 +1,98 @@
+# Layout dichiarativo delle schermate di DiviConto (KivyMD 1.2.0).
+
+<TripsScreen>:
+    MDBoxLayout:
+        orientation: "vertical"
+        MDTopAppBar:
+            title: "DiviConto — Viaggi"
+        MDFloatLayout:
+            ScrollView:
+                MDList:
+                    id: trip_list
+            MDFloatingActionButton:
+                icon: "plus"
+                type: "standard"
+                pos_hint: {"center_x": .9, "center_y": .1}
+                on_release: root.open_new_trip_dialog()
+
+
+<TripDetailScreen>:
+    MDBoxLayout:
+        orientation: "vertical"
+        MDTopAppBar:
+            id: topbar
+            title: "Viaggio"
+            left_action_items: [["arrow-left", lambda x: root.go_back()]]
+        MDBottomNavigation:
+            id: bottom_nav
+
+            MDBottomNavigationItem:
+                name: "expenses"
+                text: "Spese"
+                icon: "receipt"
+                MDFloatLayout:
+                    ScrollView:
+                        MDList:
+                            id: expense_list
+                    MDFloatingActionButton:
+                        icon: "plus"
+                        pos_hint: {"center_x": .9, "center_y": .1}
+                        on_release: root.open_expense_form()
+
+            MDBottomNavigationItem:
+                name: "people"
+                text: "Persone"
+                icon: "account-group"
+                MDBoxLayout:
+                    orientation: "vertical"
+                    MDBoxLayout:
+                        size_hint_y: None
+                        height: "72dp"
+                        padding: "8dp"
+                        spacing: "8dp"
+                        MDTextField:
+                            id: new_person
+                            hint_text: "Nome partecipante"
+                        MDRaisedButton:
+                            text: "Aggiungi"
+                            size_hint_x: None
+                            width: "120dp"
+                            on_release: root.add_person()
+                    ScrollView:
+                        MDList:
+                            id: people_list
+
+            MDBottomNavigationItem:
+                name: "balance"
+                text: "Bilancio"
+                icon: "scale-balance"
+                ScrollView:
+                    MDBoxLayout:
+                        id: balance_box
+                        orientation: "vertical"
+                        adaptive_height: True
+                        size_hint_y: None
+                        padding: "12dp"
+                        spacing: "2dp"
+
+
+<ExpenseFormScreen>:
+    MDBoxLayout:
+        orientation: "vertical"
+        MDTopAppBar:
+            title: "Nuova spesa"
+            left_action_items: [["arrow-left", lambda x: root.go_back()]]
+        ScrollView:
+            MDBoxLayout:
+                id: form_box
+                orientation: "vertical"
+                adaptive_height: True
+                size_hint_y: None
+                padding: "16dp"
+                spacing: "12dp"
+        MDRaisedButton:
+            text: "Salva spesa"
+            pos_hint: {"center_x": .5}
+            size_hint_y: None
+            height: "48dp"
+            on_release: root.save()
