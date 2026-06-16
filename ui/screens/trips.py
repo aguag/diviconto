@@ -86,3 +86,58 @@ class TripsScreen(MDScreen):
             return
         self._dialog.dismiss()
         self.refresh()
+
+    # ---- Sincronizzazione -------------------------------------------------
+    def do_sync(self):
+        app = MDApp.get_running_app()
+        if not app.sync.is_logged_in():
+            toast("Accedi per sincronizzare")
+            self.manager.current = "auth"
+            return
+        toast("Sincronizzazione…")
+
+        def done(_):
+            self.refresh()
+            toast("Sincronizzato")
+
+        app.run_async(app.sync.sync, done, lambda exc: toast(str(exc)))
+
+    def do_logout(self):
+        app = MDApp.get_running_app()
+        app.sync.logout()
+        toast("Disconnesso")
+        self.manager.current = "auth"
+
+    # ---- Unisciti a un viaggio con codice --------------------------------
+    def open_join_dialog(self):
+        app = MDApp.get_running_app()
+        if not app.sync.is_logged_in():
+            toast("Accedi per unirti a un viaggio")
+            self.manager.current = "auth"
+            return
+        self._code = MDTextField(hint_text="Codice del viaggio")
+        self._dialog = MDDialog(
+            title="Unisciti a un viaggio",
+            type="custom",
+            content_cls=self._code,
+            buttons=[
+                MDFlatButton(text="Annulla", on_release=lambda *_: self._dialog.dismiss()),
+                MDRaisedButton(text="Unisciti", on_release=lambda *_: self._join()),
+            ],
+        )
+        self._dialog.open()
+
+    def _join(self):
+        app = MDApp.get_running_app()
+        code = self._code.text.strip()
+        if not code:
+            toast("Inserisci un codice")
+            return
+        self._dialog.dismiss()
+        toast("Mi unisco…")
+
+        def done(_):
+            self.refresh()
+            toast("Unito al viaggio")
+
+        app.run_async(lambda: app.sync.join_trip(code), done, lambda exc: toast(str(exc)))

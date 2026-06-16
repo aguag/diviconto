@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from kivymd.app import MDApp
+from kivymd.uix.button import MDFlatButton
+from kivymd.uix.dialog import MDDialog
 from kivymd.uix.label import MDLabel
 from kivymd.uix.list import OneLineListItem, TwoLineListItem
 from kivymd.uix.screen import MDScreen
@@ -15,6 +17,8 @@ from ui.widgets import toast
 class TripDetailScreen(MDScreen):
     """Schermata con bottom navigation: Spese / Partecipanti / Bilancio."""
 
+    _dialog = None
+
     def on_pre_enter(self, *args):
         app = MDApp.get_running_app()
         trip = app.current_trip
@@ -24,6 +28,12 @@ class TripDetailScreen(MDScreen):
         self.ids.topbar.title = f"{trip.name} [{trip.base_currency}]"
         self.refresh_all()
 
+    def on_enter(self, *args):
+        # Sync automatico all'apertura del viaggio (se loggati), senza bloccare.
+        app = MDApp.get_running_app()
+        if app.sync.is_logged_in():
+            app.run_async(app.sync.sync, lambda _: self.refresh_all(), lambda _exc: None)
+
     def refresh_all(self):
         self.refresh_expenses()
         self.refresh_people()
@@ -31,6 +41,46 @@ class TripDetailScreen(MDScreen):
 
     def go_back(self):
         self.manager.current = "trips"
+
+    # ---- Condivisione ----------------------------------------------------
+    def show_share_code(self):
+        app = MDApp.get_running_app()
+        if not app.sync.is_logged_in():
+            toast("Accedi per condividere il viaggio")
+            return
+        trip_id = app.current_trip.id
+        toast("Recupero codice…")
+
+        def done(code):
+            if not code:
+                toast("Sincronizza prima per generare il codice")
+                return
+            self._dialog = MDDialog(
+                # auto_dismiss=False: si chiude solo coi pulsanti. Senza questo,
+                # il rilascio del tocco che ha aperto il dialog cade fuori da esso
+                # e lo chiuderebbe subito (il sync è veloce e apre a metà tocco).
+                auto_dismiss=False,
+                title="Codice del viaggio",
+                text=f"Condividi questo codice:\n\n[b]{code}[/b]\n\n"
+                     "Gli amici lo inseriscono in \"Unisciti a un viaggio\".",
+                buttons=[
+                    MDFlatButton(text="Copia", on_release=lambda *_: self._copy_code(code)),
+                    MDFlatButton(text="Chiudi", on_release=lambda *_: self._dialog.dismiss()),
+                ],
+            )
+            self._dialog.open()
+
+        # Prima sincronizza (così il viaggio esiste lato server), poi legge il codice.
+        def work():
+            app.sync.sync()
+            return app.sync.share_code(trip_id)
+
+        app.run_async(work, done, lambda exc: toast(str(exc)))
+
+    def _copy_code(self, code: str):
+        from kivy.core.clipboard import Clipboard
+        Clipboard.copy(code)
+        toast("Codice copiato")
 
     # ---- Spese -----------------------------------------------------------
     def refresh_expenses(self):

@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS trips (
     base_currency TEXT NOT NULL,
     created_at    TEXT NOT NULL,
     updated_at    TEXT NOT NULL,
-    deleted       INTEGER NOT NULL DEFAULT 0
+    deleted       INTEGER NOT NULL DEFAULT 0,
+    dirty         INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS participants (
@@ -42,7 +43,8 @@ CREATE TABLE IF NOT EXISTS participants (
     name       TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    deleted    INTEGER NOT NULL DEFAULT 0
+    deleted    INTEGER NOT NULL DEFAULT 0,
+    dirty      INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS expenses (
@@ -56,7 +58,8 @@ CREATE TABLE IF NOT EXISTS expenses (
     description  TEXT NOT NULL DEFAULT '',
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL,
-    deleted      INTEGER NOT NULL DEFAULT 0
+    deleted      INTEGER NOT NULL DEFAULT 0,
+    dirty        INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS splits (
@@ -67,13 +70,33 @@ CREATE TABLE IF NOT EXISTS splits (
     share_base      TEXT NOT NULL,
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL,
-    deleted         INTEGER NOT NULL DEFAULT 0
+    deleted         INTEGER NOT NULL DEFAULT 0,
+    dirty           INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS sync_state (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_participants_trip ON participants(trip_id);
 CREATE INDEX IF NOT EXISTS idx_expenses_trip ON expenses(trip_id);
 CREATE INDEX IF NOT EXISTS idx_splits_expense ON splits(expense_id);
 """
+
+# Colonne locali (e ordine) usate dalla sincronizzazione, escluse id/dirty.
+SYNC_COLUMNS = {
+    "trips": ["name", "description", "base_currency", "created_at", "updated_at", "deleted"],
+    "participants": ["trip_id", "name", "created_at", "updated_at", "deleted"],
+    "expenses": [
+        "trip_id", "payer_id", "amount", "currency", "rate_to_base",
+        "amount_base", "description", "created_at", "updated_at", "deleted",
+    ],
+    "splits": [
+        "expense_id", "participant_id", "mode", "share_base",
+        "created_at", "updated_at", "deleted",
+    ],
+}
 
 
 def now_iso() -> str:
@@ -102,11 +125,27 @@ class Database:
         self.path = resolve_db_path(path)
         if str(self.path) != ":memory:":
             self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(self.path))
+        # check_same_thread=False: il sync gira in un thread separato dalla UI
+        # (l'accesso è comunque serializzato, niente scritture concorrenti).
+        self.conn = sqlite3.connect(str(self.path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.executescript(SCHEMA)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        """Migrazioni idempotenti per DB creati con versioni precedenti."""
+        for table in ("trips", "participants", "expenses", "splits"):
+            cols = {
+                row["name"]
+                for row in self.conn.execute(f"PRAGMA table_info({table})").fetchall()
+            }
+            if "dirty" not in cols:
+                # Le righe preesistenti sono locali e non ancora sincronizzate.
+                self.conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1"
+                )
 
     def close(self) -> None:
         self.conn.close()
@@ -237,6 +276,65 @@ class Database:
             )
             for r in rows
         ]
+
+    # ---- Sincronizzazione -------------------------------------------------
+    def dirty_rows(self, table: str) -> list[dict]:
+        """Righe locali da inviare al server (dirty=1), come dizionari."""
+        rows = self.conn.execute(
+            f"SELECT * FROM {table} WHERE dirty = 1"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def mark_clean(self, table: str, ids: list[str]) -> None:
+        """Segna come sincronizzate (dirty=0) le righe inviate con successo."""
+        if not ids:
+            return
+        placeholders = ",".join("?" * len(ids))
+        self.conn.execute(
+            f"UPDATE {table} SET dirty = 0 WHERE id IN ({placeholders})", ids
+        )
+        self.conn.commit()
+
+    def upsert_from_remote(self, table: str, row: dict) -> None:
+        """Inserisce/aggiorna una riga arrivata dal server (resta dirty=0).
+
+        Considera solo le colonne locali (scarta gli extra del server, es.
+        owner_id/share_code) e normalizza i booleani ``deleted`` in 0/1.
+        """
+        cols = ["id"] + SYNC_COLUMNS[table]
+        values = []
+        for c in cols:
+            v = row.get(c)
+            if c == "deleted":
+                v = 1 if v in (True, 1, "true", "1") else 0
+            values.append(v)
+        col_list = ", ".join(cols)
+        placeholders = ", ".join("?" * len(cols))
+        updates = ", ".join(f"{c} = excluded.{c}" for c in cols if c != "id")
+        self.conn.execute(
+            f"INSERT INTO {table} ({col_list}, dirty) VALUES ({placeholders}, 0) "
+            f"ON CONFLICT(id) DO UPDATE SET {updates}, dirty = 0",
+            values,
+        )
+        self.conn.commit()
+
+    def get_state(self, key: str) -> Optional[str]:
+        row = self.conn.execute(
+            "SELECT value FROM sync_state WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else None
+
+    def set_state(self, key: str, value: str) -> None:
+        self.conn.execute(
+            "INSERT INTO sync_state (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+        self.conn.commit()
+
+    def delete_state(self, key: str) -> None:
+        self.conn.execute("DELETE FROM sync_state WHERE key = ?", (key,))
+        self.conn.commit()
 
     # ---- row mappers ------------------------------------------------------
     @staticmethod

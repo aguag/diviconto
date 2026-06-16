@@ -140,6 +140,44 @@ La configurazione del build è in [buildozer.spec](buildozer.spec).
 Copia il file da `bin/` sul telefono e aprilo (abilita "origini sconosciute"),
 oppure via `adb install bin/diviconto-*-debug.apk`.
 
+## Sincronizzazione tra dispositivi (Supabase)
+
+La UI può **sincronizzare le spese tra più telefoni**: ogni partecipante accede
+con la propria email e tutti vedono le stesse spese di un viaggio. L'app resta
+**offline-first** — il SQLite locale è sempre la fonte primaria, la sync scambia
+solo le righe cambiate (last-write-wins per riga sull'`updated_at` del server) e
+funziona anche dopo periodi offline. Il modulo di sync usa **solo `urllib`**
+(nessuna dipendenza aggiuntiva, né su desktop né nell'APK).
+
+### Come funziona per gli amici
+- **Chi crea il viaggio** lo apre, tocca **Condividi** e ottiene un **codice**.
+- **Gli amici** si registrano nell'app (email+password), toccano **Unisciti a un
+  viaggio** e inseriscono il codice. Non serve creare account Supabase: l'account
+  è dentro l'app.
+- L'icona **Sincronizza** (in alto nella lista viaggi) invia/scarica i dati; i
+  viaggi si sincronizzano anche automaticamente all'apertura.
+
+### Setup Supabase (una tantum, lo fa chi gestisce il progetto)
+1. Crea un progetto gratis su [supabase.com](https://supabase.com) (region EU,
+   salva la password del DB).
+2. **Authentication → Sign In / Providers**: abilita **Email**; per i test
+   disabilita la **conferma email** (così gli amici accedono subito).
+3. **SQL Editor → New query**: incolla ed esegui [supabase/schema.sql](supabase/schema.sql)
+   (crea tabelle, Row Level Security, trigger e la funzione `join_trip`).
+4. **Project Settings → API**: copia **Project URL** e chiave **anon public** e
+   mettile in [diviconto/sync_config.py](diviconto/sync_config.py) (oppure nelle
+   variabili d'ambiente `SUPABASE_URL` / `SUPABASE_ANON_KEY`).
+
+> La chiave **anon** è pubblica (protetta dalla RLS): è normale includerla
+> nell'APK. NON usare mai la `service_role` key né la password del DB nell'app.
+
+### Provare la sync da desktop (due "dispositivi")
+Due DB locali separati simulano due telefoni:
+```bash
+DIVICONTO_DB=/tmp/a.db python main.py   # dispositivo A: accedi, crea viaggio, Condividi
+DIVICONTO_DB=/tmp/b.db python main.py   # dispositivo B: accedi, Unisciti col codice
+```
+
 ## Installazione CLI (opzionale)
 ```bash
 pip install --user .
@@ -164,10 +202,13 @@ python -m unittest discover -s tests   # comando diretto (anche su Termux)
 - `diviconto/balance.py` — saldi netti + pagamenti di pareggio
 - `diviconto/core.py` — logica di business (riusata da CLI e UI)
 - `diviconto/cli.py` — interfaccia a riga di comando
+- `diviconto/sync.py` — sincronizzazione con Supabase (push/pull, auth)
+- `diviconto/sync_config.py` — URL e chiave anon del progetto Supabase
+- `supabase/schema.sql` — schema, RLS e funzioni lato server (da eseguire una volta)
 - `ui/` — interfaccia grafica Kivy/KivyMD (solo presentazione; richiama `core`)
 - `main.py` — entry point della UI; `buildozer.spec` — build Android
 
 Dettagli tecnici in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md).
 
 I prossimi passi previsti: modifica/cancellazione di spese dalla UI,
-sincronizzazione del DB tra dispositivi, divisione per percentuale/quote.
+sync in tempo reale, divisione per percentuale/quote.

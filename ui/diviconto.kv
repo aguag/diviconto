@@ -1,10 +1,54 @@
 # Layout dichiarativo delle schermate di DiviConto (KivyMD 1.2.0).
 
+<AuthScreen>:
+    MDBoxLayout:
+        orientation: "vertical"
+        MDTopAppBar:
+            title: "DiviConto — Accedi"
+        MDFloatLayout:
+            MDBoxLayout:
+                orientation: "vertical"
+                spacing: "16dp"
+                padding: "24dp"
+                size_hint: None, None
+                width: min(root.width - dp(48), dp(360))
+                height: self.minimum_height
+                pos_hint: {"center_x": .5, "center_y": .55}
+                adaptive_height: True
+                MDLabel:
+                    text: "Accedi per sincronizzare le spese tra telefoni"
+                    halign: "center"
+                    adaptive_height: True
+                MDTextField:
+                    id: email
+                    hint_text: "Email"
+                MDTextField:
+                    id: password
+                    hint_text: "Password"
+                    password: True
+                MDRaisedButton:
+                    text: "Accedi"
+                    pos_hint: {"center_x": .5}
+                    on_release: root.do_login()
+                MDFlatButton:
+                    text: "Registrati"
+                    pos_hint: {"center_x": .5}
+                    on_release: root.do_signup()
+                MDFlatButton:
+                    text: "Usa offline (senza account)"
+                    pos_hint: {"center_x": .5}
+                    on_release: root.use_offline()
+
+
 <TripsScreen>:
     MDBoxLayout:
         orientation: "vertical"
         MDTopAppBar:
             title: "DiviConto — Viaggi"
+            right_action_items:
+                [["sync", lambda x: root.do_sync(), "Sincronizza"], \
+                ["account-multiple-plus", lambda x: root.open_join_dialog(), "Unisciti a un viaggio"], \
+                ["logout", lambda x: root.do_logout(), "Disconnetti"]]
         MDFloatLayout:
             ScrollView:
                 MDList:
@@ -23,6 +67,7 @@
             id: topbar
             title: "Viaggio"
             left_action_items: [["arrow-left", lambda x: root.go_back()]]
+            right_action_items: [["share-variant", lambda x: root.show_share_code(), "Condividi"]]
         MDBottomNavigation:
             id: bottom_nav
 
