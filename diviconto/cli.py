@@ -106,7 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
     ex_add.add_argument("--trip", required=True, help="id o nome del viaggio")
     ex_add.add_argument("--payer", required=True, help="chi ha pagato (nome)")
     ex_add.add_argument("--amount", required=True, help="importo della spesa")
-    ex_add.add_argument("--desc", default="", help="descrizione della spesa")
+    ex_add.add_argument("--desc", required=True, help="descrizione della spesa (obbligatoria)")
     ex_add.add_argument("--currency", help="valuta della spesa (default: valuta base)")
     ex_add.add_argument("--rate", help="tasso di cambio verso la valuta base")
     ex_add.add_argument(

@@ -67,7 +67,9 @@
             id: topbar
             title: "Viaggio"
             left_action_items: [["arrow-left", lambda x: root.go_back()]]
-            right_action_items: [["share-variant", lambda x: root.show_share_code(), "Condividi"]]
+            right_action_items:
+                [["sync", lambda x: root.do_sync(), "Sincronizza"], \
+                ["share-variant", lambda x: root.show_share_code(), "Condividi"]]
         MDBottomNavigation:
             id: bottom_nav
 

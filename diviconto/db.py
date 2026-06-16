@@ -262,6 +262,27 @@ class Database:
             expenses.append(exp)
         return expenses
 
+    def update_expense_description(self, expense_id: str, description: str) -> None:
+        """Aggiorna la descrizione di una spesa (la marca dirty per il sync)."""
+        self.conn.execute(
+            "UPDATE expenses SET description = ?, updated_at = ?, dirty = 1 WHERE id = ?",
+            (description, now_iso(), expense_id),
+        )
+        self.conn.commit()
+
+    def delete_expense(self, expense_id: str) -> None:
+        """Soft-delete di una spesa e delle sue quote (tombstone per il sync)."""
+        ts = now_iso()
+        with self.conn:  # spesa + quote nella stessa transazione
+            self.conn.execute(
+                "UPDATE expenses SET deleted = 1, updated_at = ?, dirty = 1 WHERE id = ?",
+                (ts, expense_id),
+            )
+            self.conn.execute(
+                "UPDATE splits SET deleted = 1, updated_at = ?, dirty = 1 WHERE expense_id = ?",
+                (ts, expense_id),
+            )
+
     def _splits_for(self, expense_id: str) -> list[Split]:
         rows = self.conn.execute(
             "SELECT * FROM splits WHERE deleted = 0 AND expense_id = ?", (expense_id,)

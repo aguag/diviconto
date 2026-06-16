@@ -2,16 +2,27 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from kivymd.app import MDApp
-from kivymd.uix.button import MDFlatButton
+from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.label import MDLabel
 from kivymd.uix.list import OneLineListItem, TwoLineListItem
 from kivymd.uix.screen import MDScreen
+from kivymd.uix.textfield import MDTextField
 
 from diviconto import core
 from diviconto.money import format_money
 from ui.widgets import toast
+
+
+def _format_when(iso_ts: str) -> str:
+    """Formatta un timestamp ISO (UTC) come data/ora locale leggibile."""
+    try:
+        return datetime.fromisoformat(iso_ts).astimezone().strftime("%d/%m/%Y %H:%M")
+    except (ValueError, TypeError):
+        return iso_ts or ""
 
 
 class TripDetailScreen(MDScreen):
@@ -41,6 +52,19 @@ class TripDetailScreen(MDScreen):
 
     def go_back(self):
         self.manager.current = "trips"
+
+    def do_sync(self):
+        app = MDApp.get_running_app()
+        if not app.sync.is_logged_in():
+            toast("Accedi per sincronizzare")
+            return
+        toast("Sincronizzazione…")
+
+        def done(_):
+            self.refresh_all()
+            toast("Sincronizzato")
+
+        app.run_async(app.sync.sync, done, lambda exc: toast(str(exc)))
 
     # ---- Condivisione ----------------------------------------------------
     def show_share_code(self):
@@ -99,7 +123,12 @@ class TripDetailScreen(MDScreen):
             if e.currency != trip.base_currency:
                 amount += f" = {format_money(e.amount_base, trip.base_currency)}"
             desc = e.description or "(senza descrizione)"
-            lst.add_widget(TwoLineListItem(text=f"{payer}: {amount}", secondary_text=desc))
+            item = TwoLineListItem(
+                text=f"{payer}: {amount}",
+                secondary_text=f"{desc} · {_format_when(e.created_at)}",
+            )
+            item.bind(on_release=lambda _w, exp=e: self.open_expense_actions(exp))
+            lst.add_widget(item)
 
     def open_expense_form(self):
         app = MDApp.get_running_app()
@@ -107,6 +136,71 @@ class TripDetailScreen(MDScreen):
             toast("Aggiungi prima un partecipante")
             return
         self.manager.current = "expense_form"
+
+    # ---- Azioni su una spesa (modifica descrizione / cancella) ------------
+    def open_expense_actions(self, exp):
+        self._dialog = MDDialog(
+            auto_dismiss=False,
+            title="Spesa",
+            text=exp.description or "(senza descrizione)",
+            buttons=[
+                MDFlatButton(text="Modifica descrizione",
+                             on_release=lambda *_: self._edit_description(exp)),
+                MDFlatButton(text="Cancella", theme_text_color="Custom",
+                             text_color=(0.8, 0, 0, 1),
+                             on_release=lambda *_: self._confirm_delete(exp)),
+                MDFlatButton(text="Chiudi", on_release=lambda *_: self._dialog.dismiss()),
+            ],
+        )
+        self._dialog.open()
+
+    def _edit_description(self, exp):
+        self._dialog.dismiss()
+        self._edit_field = MDTextField(text=exp.description, hint_text="Descrizione")
+        self._dialog = MDDialog(
+            auto_dismiss=False,
+            title="Modifica descrizione",
+            type="custom",
+            content_cls=self._edit_field,
+            buttons=[
+                MDFlatButton(text="Annulla", on_release=lambda *_: self._dialog.dismiss()),
+                MDRaisedButton(text="Salva", on_release=lambda *_: self._save_description(exp)),
+            ],
+        )
+        self._dialog.open()
+
+    def _save_description(self, exp):
+        app = MDApp.get_running_app()
+        try:
+            core.update_expense_description(app.db, exp.id, self._edit_field.text)
+        except ValueError as exc:
+            toast(str(exc))
+            return
+        self._dialog.dismiss()
+        self.refresh_expenses()
+        toast("Descrizione aggiornata")
+
+    def _confirm_delete(self, exp):
+        self._dialog.dismiss()
+        self._dialog = MDDialog(
+            auto_dismiss=False,
+            title="Cancellare la spesa?",
+            text=f"{exp.description or '(senza descrizione)'}\nL'operazione non è annullabile.",
+            buttons=[
+                MDFlatButton(text="Annulla", on_release=lambda *_: self._dialog.dismiss()),
+                MDRaisedButton(text="Cancella", md_bg_color=(0.8, 0, 0, 1),
+                               on_release=lambda *_: self._do_delete(exp)),
+            ],
+        )
+        self._dialog.open()
+
+    def _do_delete(self, exp):
+        app = MDApp.get_running_app()
+        core.delete_expense(app.db, exp.id)
+        self._dialog.dismiss()
+        self.refresh_expenses()
+        self.refresh_balance()
+        toast("Spesa cancellata")
 
     # ---- Partecipanti ----------------------------------------------------
     def refresh_people(self):

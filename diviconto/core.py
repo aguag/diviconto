@@ -92,6 +92,9 @@ def add_expense(
     if not participants:
         raise ValueError("aggiungi almeno un partecipante prima di registrare spese")
 
+    if not description.strip():
+        raise ValueError("la descrizione della spesa è obbligatoria")
+
     payer = _participant_or_error(db, trip, payer_name)
     amount = to_money(amount)
     if amount <= 0:
@@ -178,6 +181,19 @@ def _split_equally(total: Decimal, n: int) -> list[Decimal]:
     drift = to_money(total - base * n)
     shares[-1] = to_money(shares[-1] + drift)
     return shares
+
+
+def update_expense_description(db: Database, expense_id: str, description: str) -> None:
+    """Modifica la descrizione di una spesa (obbligatoria, non vuota)."""
+    description = description.strip()
+    if not description:
+        raise ValueError("la descrizione della spesa è obbligatoria")
+    db.update_expense_description(expense_id, description)
+
+
+def delete_expense(db: Database, expense_id: str) -> None:
+    """Cancella (soft-delete) una spesa."""
+    db.delete_expense(expense_id)
 
 
 # ---- Balance -------------------------------------------------------------

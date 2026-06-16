@@ -105,9 +105,13 @@ python main.py
 ```
 
 La UI offre: elenco/creazione viaggi, gestione partecipanti, inserimento spese
-(parti uguali o importi esatti, multi-valuta con tasso) e schermata bilancio con
-saldi e pagamenti suggeriti. Il database è in `~/.config/diviconto/diviconto.db`
-(cartella dati dell'app, valida anche su Android).
+(parti uguali o importi esatti, multi-valuta con tasso; **descrizione
+obbligatoria**) e schermata bilancio con saldi e pagamenti suggeriti. Ogni spesa
+mostra **data e ora**; toccandola si può **modificare la descrizione** o
+**cancellarla**. Dalla pagina del viaggio si può **Sincronizzare** e
+**Condividere** il codice. Il database è in `~/.config/diviconto/diviconto.db`
+(cartella dati dell'app, valida anche su Android); la variabile `DIVICONTO_DB`
+lo sovrascrive (utile per provare più "dispositivi" sullo stesso PC).
 
 ### Build dell'APK Android
 

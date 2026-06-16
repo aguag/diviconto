@@ -203,6 +203,17 @@ class SyncTwoClientsTest(unittest.TestCase):
         self.b.sync()
         self.assertEqual(self.b.db.list_trips(), [])
 
+    def test_expense_delete_propagates(self):
+        trip = seed_trip(self.a)
+        self.a.sync()
+        self.b.sync()
+        self.assertEqual(len(self.b.db.list_expenses(trip.id)), 1)
+        exp = self.a.db.list_expenses(trip.id)[0]
+        core.delete_expense(self.a.db, exp.id)
+        self.a.sync()
+        self.b.sync()
+        self.assertEqual(self.b.db.list_expenses(trip.id), [])
+
     def test_join_trip_with_code(self):
         trip = seed_trip(self.a)
         self.a.sync()
