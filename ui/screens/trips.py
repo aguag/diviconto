@@ -24,6 +24,7 @@ class TripsScreen(MDScreen):
 
     def refresh(self):
         app = MDApp.get_running_app()
+        self._update_account_bar(app)
         container = self.ids.trip_list
         container.clear_widgets()
         trips = app.db.list_trips()
@@ -102,11 +103,28 @@ class TripsScreen(MDScreen):
 
         app.run_async(app.sync.sync, done, lambda exc: toast(str(exc)))
 
+    # ---- Account (connesso / offline) ------------------------------------
+    def _update_account_bar(self, app):
+        if app.sync.is_logged_in():
+            self.ids.account_label.text = f"Connesso: {app.sync.current_user()}"
+            self.ids.account_btn.text = "Esci"
+        else:
+            self.ids.account_label.text = "Modalità offline (non connesso)"
+            self.ids.account_btn.text = "Accedi"
+
+    def account_action(self):
+        """Esce se connesso, altrimenti porta alla schermata di accesso."""
+        app = MDApp.get_running_app()
+        if app.sync.is_logged_in():
+            self.do_logout()
+        else:
+            self.manager.current = "auth"
+
     def do_logout(self):
         app = MDApp.get_running_app()
         app.sync.logout()
         toast("Disconnesso")
-        self.manager.current = "auth"
+        self.refresh()  # resta sui viaggi in modalità offline
 
     # ---- Unisciti a un viaggio con codice --------------------------------
     def open_join_dialog(self):

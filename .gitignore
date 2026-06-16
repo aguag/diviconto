@@ -15,6 +15,7 @@ venv/
 
 # Build Android (Buildozer)
 .buildozer/
+.buildozer-global/
 bin/
 build-android.log
 

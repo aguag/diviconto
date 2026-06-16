@@ -47,8 +47,24 @@
             title: "DiviConto — Viaggi"
             right_action_items:
                 [["sync", lambda x: root.do_sync(), "Sincronizza"], \
-                ["account-multiple-plus", lambda x: root.open_join_dialog(), "Unisciti a un viaggio"], \
-                ["logout", lambda x: root.do_logout(), "Disconnetti"]]
+                ["account-multiple-plus", lambda x: root.open_join_dialog(), "Unisciti a un viaggio"]]
+        MDBoxLayout:
+            size_hint_y: None
+            height: "52dp"
+            padding: "12dp", "4dp"
+            spacing: "8dp"
+            md_bg_color: app.theme_cls.primary_light
+            MDLabel:
+                id: account_label
+                text: ""
+                valign: "center"
+                shorten: True
+                shorten_from: "right"
+            MDRaisedButton:
+                id: account_btn
+                text: "Esci"
+                pos_hint: {"center_y": .5}
+                on_release: root.account_action()
         MDFloatLayout:
             ScrollView:
                 MDList:
