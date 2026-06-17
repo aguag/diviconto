@@ -6,12 +6,11 @@ from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.dialog import MDDialog
-from kivymd.uix.list import TwoLineListItem
+from kivymd.uix.list import ThreeLineListItem, TwoLineListItem
 from kivymd.uix.screen import MDScreen
-from kivymd.uix.textfield import MDTextField
 
 from diviconto import core
-from ui.widgets import toast
+from ui.widgets import FormTextField, toast
 
 
 class TripsScreen(MDScreen):
@@ -33,12 +32,21 @@ class TripsScreen(MDScreen):
                 TwoLineListItem(text="Nessun viaggio", secondary_text="Tocca + per crearne uno")
             )
             return
+        members = app.db.members_by_trip()
+        me = app.sync.current_user()
         for trip in trips:
             secondary = trip.description or "(nessuna descrizione)"
-            item = TwoLineListItem(
-                text=f"{trip.name}  [{trip.base_currency}]",
-                secondary_text=secondary,
-            )
+            title = f"{trip.name}  [{trip.base_currency}]"
+            # Mostra con chi è condiviso: gli altri membri (esclude te stesso).
+            others = [e for e in members.get(trip.id, []) if e and e != me]
+            if others:
+                item = ThreeLineListItem(
+                    text=title,
+                    secondary_text=secondary,
+                    tertiary_text="Condiviso con: " + ", ".join(others),
+                )
+            else:
+                item = TwoLineListItem(text=title, secondary_text=secondary)
             item.bind(on_release=lambda _w, t=trip: self.open_trip(t))
             container.add_widget(item)
 
@@ -49,9 +57,9 @@ class TripsScreen(MDScreen):
 
     # ---- dialog nuovo viaggio --------------------------------------------
     def open_new_trip_dialog(self):
-        self._name = MDTextField(hint_text="Nome del viaggio")
-        self._currency = MDTextField(hint_text="Valuta base (es. EUR)", text="EUR")
-        self._desc = MDTextField(hint_text="Descrizione (opzionale)")
+        self._name = FormTextField(hint_text="Nome del viaggio")
+        self._currency = FormTextField(hint_text="Valuta base (es. EUR)", text="EUR")
+        self._desc = FormTextField(hint_text="Descrizione (opzionale)")
         content = MDBoxLayout(
             orientation="vertical",
             spacing="12dp",
@@ -133,7 +141,7 @@ class TripsScreen(MDScreen):
             toast("Accedi per unirti a un viaggio")
             self.manager.current = "auth"
             return
-        self._code = MDTextField(hint_text="Codice del viaggio")
+        self._code = FormTextField(hint_text="Codice del viaggio")
         self._dialog = MDDialog(
             title="Unisciti a un viaggio",
             type="custom",

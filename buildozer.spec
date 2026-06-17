@@ -20,13 +20,18 @@ version = 0.1.0
 icon.filename = %(source.dir)s/data/icon.png
 
 # Dipendenze: il core usa solo la stdlib; sqlite3 è incluso in python-for-android.
-# openssl serve per le chiamate HTTPS (urllib) della sincronizzazione con Supabase.
-requirements = python3,kivy==2.3.1,kivymd==1.2.0,openssl
+# openssl serve per le chiamate HTTPS (urllib) della sincronizzazione con Supabase;
+# certifi fornisce il bundle di certificati CA (l'APK non ha i CA di sistema, senza
+# di esso la verifica TLS fallisce e il sync non si collega a Supabase).
+requirements = python3,kivy==2.3.1,kivymd==1.2.0,openssl,certifi
 
 orientation = portrait
 fullscreen = 0
 
-[android]
+# NB: queste chiavi DEVONO stare sotto [app]. Buildozer non ha una sezione
+# [android]: se ci finiscono sotto vengono ignorate (e si usano i default →
+# niente permesso INTERNET → su Android il DNS fallisce con "[Errno 7] No
+# address associated with hostname").
 
 # API target/minima ragionevoli (aggiornabili in base all'SDK installato)
 android.api = 33

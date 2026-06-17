@@ -25,7 +25,15 @@ class FakeSupabase:
         self.tables = {"trips": {}, "participants": {}, "expenses": {}, "splits": {}}
         self.users = {}        # email -> {"id":..., "password":...}
         self.tokens = {}       # access_token -> email
+        self.members = {}      # trip_id -> {email: role}
         self.clock = 0
+        self._current_email = None  # utente della richiesta corrente (dal token)
+
+    def _email_for(self, uid):
+        for email, u in self.users.items():
+            if u["id"] == uid:
+                return email
+        return None
 
     def _now(self) -> str:
         self.clock += 1
@@ -38,12 +46,18 @@ class FakeSupabase:
         q = {k: v[0] for k, v in urllib.parse.parse_qs(parsed.query).items()}
         body = json.loads(data) if data else None
 
+        auth = headers.get("Authorization", "")
+        token = auth[len("Bearer "):] if auth.startswith("Bearer ") else None
+        self._current_email = self.tokens.get(token)
+
         if path == "/auth/v1/signup":
             return self._signup(body)
         if path == "/auth/v1/token":
             return self._token(q, body)
         if path == "/rest/v1/rpc/join_trip":
             return self._join(body)
+        if path == "/rest/v1/trip_members":
+            return self._select_members()
         if path.startswith("/rest/v1/"):
             table = path[len("/rest/v1/"):]
             if method == "POST":
@@ -51,6 +65,14 @@ class FakeSupabase:
             if method == "GET":
                 return self._select(table, q)
         return self._json(404, {"message": f"non gestito: {method} {path}"})
+
+    def _select_members(self):
+        rows = [
+            {"trip_id": tid, "email": email, "role": role}
+            for tid, members in self.members.items()
+            for email, role in members.items()
+        ]
+        return self._json(200, rows)
 
     # --- auth ---
     def _signup(self, body):
@@ -85,6 +107,8 @@ class FakeSupabase:
         code = body["code"]
         for row in self.tables["trips"].values():
             if row.get("share_code") == code:
+                if self._current_email:
+                    self.members.setdefault(row["id"], {})[self._current_email] = "member"
                 return self._json(200, row["id"])
         return self._json(400, {"message": "codice non valido"})
 
@@ -97,6 +121,10 @@ class FakeSupabase:
             if table == "trips" and not merged.get("share_code"):
                 merged["share_code"] = uuid.uuid4().hex[:8].upper()
             store[row["id"]] = merged
+            if table == "trips":  # il creatore è owner (come il trigger server)
+                owner_email = self._email_for(row.get("owner_id"))
+                if owner_email:
+                    self.members.setdefault(row["id"], {}).setdefault(owner_email, "owner")
         return (201, b"")  # return=minimal
 
     def _select(self, table, q):
@@ -223,12 +251,103 @@ class SyncTwoClientsTest(unittest.TestCase):
         self.assertEqual(returned, trip.id)
         self.assertEqual([t.name for t in self.b.db.list_trips()], ["Roma"])
 
+    def test_join_older_trip_after_own_sync(self):
+        # A crea il viaggio (updated_at "vecchio").
+        trip = seed_trip(self.a)
+        self.a.sync()
+        code = self.a.share_code(trip.id)
+        # Simula che B abbia già sincronizzato dati propri più recenti: i suoi
+        # watermark sono avanti rispetto all'updated_at del viaggio di A, che B
+        # non ha ancora in locale (ne diventa membro solo ora, unendosi).
+        high = "2020-01-01T00:00:999999999999"
+        for table in ("trips", "participants", "expenses", "splits"):
+            self.b.db.set_state(f"wm:{table}", high)
+        # Unendosi, il viaggio (più vecchio del watermark) deve comunque comparire.
+        self.b.join_trip(code)
+        self.assertIn("Roma", [t.name for t in self.b.db.list_trips()])
+        self.assertEqual(len(self.b.db.list_expenses(trip.id)), 1)
+
+    def test_offline_accountant_can_upload_and_share(self):
+        # Il "contabile" lavora OFFLINE (non loggato): viaggio, persone, spesa.
+        acct = make_client(self.server)
+        seed_trip(acct)
+        self.assertFalse(acct.is_logged_in())
+        # Più tardi crea un account e accede: i dati offline NON vanno persi...
+        acct.signup("acct@x.it", "pw")
+        acct.sync()  # ...e vengono caricati sul server (push delle righe dirty)
+        trip_id = acct.db.list_trips()[0].id
+        code = acct.share_code(trip_id)
+        self.assertTrue(code)
+        # Un amico si unisce col codice e vede tutto.
+        friend = make_client(self.server)
+        friend.signup("friend@x.it", "pw2")
+        friend.join_trip(code)
+        self.assertEqual([t.name for t in friend.db.list_trips()], ["Roma"])
+        self.assertEqual(len(friend.db.list_expenses(trip_id)), 1)
+        acct.db.close()
+        friend.db.close()
+
+    def test_members_visible_after_join(self):
+        trip = seed_trip(self.a)        # A è owner
+        self.a.sync()
+        code = self.a.share_code(trip.id)
+        self.b.join_trip(code)          # B si unisce
+        self.a.sync()                   # A riscarica la membership di B
+        # Entrambi vedono i due membri nella cache locale.
+        self.assertEqual(self.a.db.members_by_trip().get(trip.id), ["a@x.it", "b@x.it"])
+        self.assertEqual(self.b.db.members_by_trip().get(trip.id), ["a@x.it", "b@x.it"])
+
     @staticmethod
     def _rename(db, trip_id, name):
         db.conn.execute(
             "UPDATE trips SET name = ?, dirty = 1 WHERE id = ?", (name, trip_id)
         )
         db.conn.commit()
+
+
+class AccountSwitchTest(unittest.TestCase):
+    """Il DB locale è legato a un account per volta (vedi _store_session)."""
+
+    def setUp(self):
+        self.server = FakeSupabase()
+        self.client = make_client(self.server)  # un solo "dispositivo"/DB
+
+    def tearDown(self):
+        self.client.db.close()
+
+    def _count(self, table):
+        return self.client.db.conn.execute(
+            f"SELECT COUNT(*) AS c FROM {table}"
+        ).fetchone()["c"]
+
+    def test_switch_account_wipes_local_cache(self):
+        # Utente A accede, crea dati e sincronizza.
+        self.client.signup("a@x.it", "password1")
+        seed_trip(self.client)
+        self.client.sync()
+        self.assertEqual([t.name for t in self.client.db.list_trips()], ["Roma"])
+        # Utente B accede sullo STESSO dispositivo: la cache di A va azzerata.
+        self.client.signup("b@x.it", "password2")
+        self.assertEqual(self.client.db.list_trips(), [])
+        for table in ("trips", "participants", "expenses", "splits"):
+            self.assertEqual(self._count(table), 0, table)
+        self.assertIsNone(self.client.db.get_state("wm:trips"))
+
+    def test_relogin_same_account_keeps_data(self):
+        self.client.signup("a@x.it", "password1")
+        seed_trip(self.client)
+        self.client.sync()
+        self.client.logout()
+        self.client.login("a@x.it", "password1")  # stesso utente: niente wipe
+        self.assertEqual([t.name for t in self.client.db.list_trips()], ["Roma"])
+
+    def test_offline_data_adopted_on_first_login(self):
+        # Lavoro offline senza login: righe dirty, nessun account proprietario.
+        seed_trip(self.client)
+        self.assertTrue(self.client.db.dirty_rows("trips"))
+        # Primo login: i dati offline NON vanno azzerati (diventano dell'utente).
+        self.client.signup("a@x.it", "password1")
+        self.assertEqual([t.name for t in self.client.db.list_trips()], ["Roma"])
 
 
 class AuthTest(unittest.TestCase):

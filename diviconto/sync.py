@@ -6,13 +6,16 @@ solo le righe cambiate (push delle righe ``dirty``, pull di quelle con
 last-write-wins sull'``updated_at`` autoritativo del server; le cancellazioni
 viaggiano come ``deleted = true`` (tombstone).
 
-Usa solo la libreria standard (``urllib``): nessuna dipendenza aggiuntiva, così
-funziona identico su desktop e nell'APK Android.
+Usa la libreria standard (``urllib``) per le richieste HTTP. Su Android l'APK
+include ``certifi`` solo per fornire il bundle di certificati CA alla verifica
+TLS (vedi :func:`_get_ssl_context`); su desktop non serve.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -25,6 +28,37 @@ from .sync_config import SUPABASE_ANON_KEY, SUPABASE_URL
 SYNC_TABLES = ("trips", "participants", "expenses", "splits")
 
 _EPOCH = "1970-01-01T00:00:00+00:00"
+
+# Trust store di sistema su Android (file CA in formato c_rehash).
+_ANDROID_CA_DIR = "/system/etc/security/cacerts"
+
+_ssl_context: Optional[ssl.SSLContext] = None
+
+
+def _get_ssl_context() -> ssl.SSLContext:
+    """Context TLS con un bundle di CA valido sia su desktop sia su Android.
+
+    Su Android l'APK non ha i certificati nei path standard di OpenSSL: senza
+    questo, ``urlopen`` su HTTPS fallisce la verifica e il sync non parte.
+    Si prova ``certifi`` (incluso nell'APK), poi il trust store di sistema
+    Android, infine il context di default (desktop con CA di sistema).
+    """
+    global _ssl_context
+    if _ssl_context is not None:
+        return _ssl_context
+    ctx = ssl.create_default_context()
+    try:
+        import certifi  # opzionale: presente nell'APK, non richiesto su desktop
+
+        ctx.load_verify_locations(cafile=certifi.where())
+    except Exception:
+        if os.path.isdir(_ANDROID_CA_DIR):
+            try:
+                ctx.load_verify_locations(capath=_ANDROID_CA_DIR)
+            except Exception:
+                pass
+    _ssl_context = ctx
+    return ctx
 
 
 class SyncError(Exception):
@@ -83,8 +117,18 @@ class SyncClient:
         if resp.get("refresh_token"):
             self.db.set_state("refresh_token", resp["refresh_token"])
         user = resp.get("user") or {}
-        if user.get("id"):
-            self.db.set_state("user_id", user["id"])
+        new_uid = user.get("id")
+        if new_uid:
+            # Il DB locale è legato a un solo account per volta. Se ne accede uno
+            # diverso (o, su DB pre-esistenti senza marcatore, sono presenti dati
+            # già sincronizzati di qualcun altro), si azzera la cache e si
+            # riparte dai dati del nuovo account. Il lavoro offline non ancora
+            # inviato (dirty) viene invece mantenuto e diventa di questo utente.
+            prev = self.db.get_state("session_user")
+            if new_uid != prev and (prev is not None or self.db.has_synced_data()):
+                self.db.clear_synced_data()
+            self.db.set_state("session_user", new_uid)
+            self.db.set_state("user_id", new_uid)
         if user.get("email"):
             self.db.set_state("user_email", user["email"])
 
@@ -112,6 +156,18 @@ class SyncClient:
             self._push(table)
         for table in SYNC_TABLES:
             self._pull(table)
+        self._pull_members()
+
+    def _pull_members(self) -> None:
+        """Aggiorna la cache locale dei membri (chi accede a ciascun viaggio).
+
+        La RLS restituisce solo i membri dei viaggi di cui si fa parte. Non c'è
+        watermark: `trip_members` è piccola e la si rilegge intera a ogni sync.
+        """
+        rows = self._request(
+            "GET", "/rest/v1/trip_members", params={"select": "trip_id,email,role"}
+        ) or []
+        self.db.replace_trip_members(rows)
 
     def join_trip(self, code: str) -> str:
         """Si unisce a un viaggio tramite codice, poi sincronizza. Ritorna l'id."""
@@ -120,6 +176,14 @@ class SyncClient:
         trip_id = self._request(
             "POST", "/rest/v1/rpc/join_trip", body={"code": code.strip()},
         )
+        # Un viaggio appena unito è stato creato/aggiornato prima d'ora: il suo
+        # ``updated_at`` può essere più VECCHIO del watermark di pull, e il pull
+        # incrementale lo salterebbe (oltre a poter scaricare spese senza il
+        # viaggio padre → errore FK). Azzeriamo i watermark così il prossimo
+        # pull riscarica, in ordine di dipendenza, tutto ciò di cui siamo ora
+        # membri (il nuovo viaggio compreso). È idempotente: l'upsert non duplica.
+        for table in SYNC_TABLES:
+            self.db.delete_state(f"wm:{table}")
         self.sync()
         return trip_id
 
@@ -213,7 +277,9 @@ class SyncClient:
         """Esegue la richiesta HTTP. Isolato per poterlo sostituire nei test."""
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            with urllib.request.urlopen(
+                req, timeout=self.timeout, context=_get_ssl_context()
+            ) as resp:
                 return resp.status, resp.read()
         except urllib.error.HTTPError as exc:
             return exc.code, exc.read()

@@ -41,8 +41,9 @@ business è indipendente sia dall'interfaccia (CLI e UI Kivy) sia dallo storage
 | [balance.py](../diviconto/balance.py) | Saldi netti + settlement greedy | Funzioni pure |
 | [core.py](../diviconto/core.py) | Orchestrazione: crea viaggio, aggiungi spesa, calcola bilancio | Solleva `ValueError`, non stampa |
 | [cli.py](../diviconto/cli.py) | Parsing argomenti e output | Strato sottile su `core` |
-| [sync.py](../diviconto/sync.py) | Sincronizzazione con Supabase (auth + push/pull) | Solo `urllib` (stdlib) |
+| [sync.py](../diviconto/sync.py) | Sincronizzazione con Supabase (auth + push/pull) | HTTP con `urllib` (stdlib); `certifi` solo per i CA su Android |
 | [sync_config.py](../diviconto/sync_config.py) | URL + chiave anon del progetto Supabase | Valori pubblici, override da env |
+| [tools/supabase_admin.py](../tools/supabase_admin.py) | Manutenzione DB server (elenco/purge) via `service_role` | Solo stdlib; chiave da env; dry-run di default |
 
 ## Modello dati
 
@@ -102,6 +103,62 @@ su desktop e Android). Schema server in [supabase/schema.sql](../supabase/schema
 - **Conflitti**: per riga, **last-write-wins** sull'`updated_at` del server;
   le cancellazioni viaggiano come `deleted=true` (tombstone).
 - **Ordine**: trips → participants → expenses → splits (rispetta le FK locali).
+- **Membri di un viaggio**: a ogni sync `_pull_members()` rilegge `trip_members`
+  (la RLS restituisce solo i membri dei viaggi propri) e rimpiazza una **cache
+  locale di sola lettura** (`trip_members(trip_id, email, role)`), usata dalla UI
+  per mostrare "Condiviso con: …". L'`email` del membro è catturata sul server
+  alla creazione (trigger owner) e all'adesione (`join_trip`), leggendo
+  `auth.users` in `SECURITY DEFINER` (i client non vi accedono direttamente).
+- **Unirsi a un viaggio** (`join_trip`): dopo la RPC che aggiunge la membership,
+  i watermark di pull vengono **azzerati** prima del sync. Un viaggio appena unito
+  ha un `updated_at` precedente, spesso più vecchio del watermark corrente: il
+  pull incrementale lo salterebbe (e scaricare le spese senza il viaggio padre
+  darebbe un errore FK). Azzerando i watermark il pull riscarica, in ordine di
+  dipendenza, tutto ciò di cui si è ora membri.
+
+> **Le cancellazioni si propagano solo come soft-delete.** Poiché il pull scarica
+> le righe con `updated_at > watermark`, una riga **rimossa fisicamente** dal
+> server non genera nulla da scaricare: i dispositivi continuano a mostrare la
+> loro copia locale (e una copia `dirty` la ricrea al push successivo). Per far
+> sparire un dato ovunque si deve marcare `deleted=true` (il trigger aggiorna
+> `updated_at`, il pull lo propaga, `list_*` filtra `deleted=0`). Vale anche per
+> la manutenzione lato server: vedi `tools/supabase_admin.py` (soft-delete di
+> default, `--hard` solo per spazzatura di account usa-e-getta).
+
+### Un account per volta nel DB locale
+Il SQLite locale **non** rispecchia la membership del server (non ha `owner_id`
+né `trip_members`): è una cache legata a **un solo account per volta**, marcato
+da `sync_state["session_user"]`. A ogni login (`_store_session`):
+- se l'utente è **diverso** dal proprietario corrente — oppure, su DB precedenti
+  senza marcatore, esistono già dati sincronizzati (`dirty=0`) di un altro
+  account — si chiama `db.clear_synced_data()` (svuota trips/participants/
+  expenses/splits + watermark `wm:*`) e si riparte dai dati del nuovo account;
+- se è lo **stesso** utente, o è il **primo login da offline** (dati solo
+  `dirty=1`, mai sincronizzati), la cache si **mantiene**: il lavoro offline
+  resta e al sync diventa di questo utente.
+
+Il `logout` cancella solo i token, **non** `session_user`: così un account
+diverso che accede in seguito fa scattare l'azzeramento. Dopo il login l'app
+fa un sync per popolare subito la lista (altrimenti, dopo un azzeramento,
+resterebbe vuota). Senza questo meccanismo, su un dispositivo condiviso i viaggi
+di account diversi si sarebbero accumulati nello stesso DB, mostrati a tutti.
+
+**Conseguenza "lavora ora, condividi poi":** chi usa l'app *senza account*
+("Continua senza account") lavora in locale (righe `dirty`, `session_user` nullo);
+al primo login quei dati non vengono azzerati ma **caricati** sul server dal sync
+(owner = quell'account), e quindi condivisibili col codice. La schermata di
+accesso lo rileva prima del login (`session_user` nullo + viaggi `dirty`) e dopo
+l'upload mostra "I tuoi viaggi offline sono stati caricati sul tuo account".
+Coperto dal test `test_offline_accountant_can_upload_and_share`.
+
+### TLS su Android
+Su desktop `urllib` usa i certificati CA di sistema. Nell'APK quei file non sono
+nei path standard di OpenSSL, quindi la verifica TLS fallirebbe: `_get_ssl_context()`
+in `sync.py` costruisce un contesto con il bundle di **`certifi`** (incluso
+nell'APK), con fallback al trust store Android e infine al default desktop. Per
+questo `certifi` è nei `requirements` di `buildozer.spec` ed è l'unica dipendenza
+di terze parti del runtime. Serve anche il permesso `android.permission.INTERNET`
+(sotto `[app]`, non `[android]`, altrimenti viene ignorato).
 
 ### Sicurezza lato server (RLS)
 Row Level Security su tutte le tabelle: un utente vede/scrive solo i viaggi di cui
@@ -112,13 +169,25 @@ aggiunge un membro tramite il codice condiviso. Le policy di `trips` includono
 al primo upsert la membership owner non è ancora visibile (creata da un trigger
 AFTER INSERT) e senza quella clausola SELECT/UPDATE fallirebbero.
 
+## UI: tastiera software su Android
+
+Due accorgimenti in `ui/` per la scrittura nei form su Android:
+- **`Window.softinput_mode = "below_target"`** (in `app.py`): all'apertura della
+  tastiera la vista scorre per tenere il campo a fuoco **sopra** la tastiera,
+  altrimenti i campi in basso (es. la descrizione della spesa) restano coperti.
+- **`FormTextField`** (`ui/widgets.py`, usato dalla form spese): su Android la
+  tastiera chiusa col tasto Indietro **non azzera il `focus`** del campo, quindi
+  ritoccando lo stesso campo non si riaprirebbe. Il widget, in `on_touch_down`,
+  se il campo è già a fuoco fa un breve `focus = False` così il tocco (gestito da
+  super) lo rifocalizza e riapre la tastiera.
+
 ## Estensioni previste
 
 - **Nuovi criteri di divisione** (`%`, quote): aggiungere un `mode` e la logica
   in `core._build_splits`; lo schema regge già (`splits.mode` + `share_base`).
 - **Sync in tempo reale** (Supabase Realtime) al posto del sync manuale/su apertura.
-- **Modifica/cancellazione spese dalla UI** (lo schema con `deleted`/`updated_at`
-  è già pronto a propagarle).
+- **Cancellazione di un viaggio dalla UI** (oggi si modifica/cancella la singola
+  spesa; lo schema con `deleted`/`updated_at` è già pronto a propagarlo).
 
 ## Test
 
@@ -126,8 +195,10 @@ AFTER INSERT) e senza quella clausola SELECT/UPDATE fallirebbero.
 - `test_money.py` — arrotondamenti e conversioni
 - `test_core.py` — divisioni, valuta, validazioni, settlement (in DB `:memory:`)
 - `test_cli.py` — flusso end-to-end via `subprocess`
-- `test_sync.py` — push/pull/watermark/LWW/tombstone/auth con un finto Supabase
-  in memoria (intercetta `SyncClient._http`, due client con DB distinti)
+- `test_sync.py` — push/pull/watermark/LWW/tombstone/auth, cambio account
+  (azzeramento cache), unione a un viaggio "vecchio", membri condivisi e flusso
+  offline→carica→condividi, con un finto Supabase in memoria (intercetta
+  `SyncClient._http`, più client con DB distinti)
 
 ```bash
 ./run-tests        # oppure: make test, oppure: python -m unittest discover -s tests

@@ -10,10 +10,9 @@ from kivymd.uix.button import MDRaisedButton
 from kivymd.uix.label import MDLabel
 from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
-from kivymd.uix.textfield import MDTextField
 
 from diviconto import core
-from ui.widgets import toast
+from ui.widgets import FormTextField, toast
 
 
 class ExpenseFormScreen(MDScreen):
@@ -40,21 +39,21 @@ class ExpenseFormScreen(MDScreen):
         box.add_widget(self._wrap(self.payer_btn))
 
         # Importo e valuta
-        self.amount_field = MDTextField(hint_text="Importo", input_filter="float")
+        self.amount_field = FormTextField(hint_text="Importo", input_filter="float")
         box.add_widget(self.amount_field)
 
-        self.currency_field = MDTextField(
+        self.currency_field = FormTextField(
             hint_text="Valuta", text=trip.base_currency,
         )
         box.add_widget(self.currency_field)
 
-        self.rate_field = MDTextField(
+        self.rate_field = FormTextField(
             hint_text=f"Tasso verso {trip.base_currency} (solo se valuta diversa)",
             input_filter="float",
         )
         box.add_widget(self.rate_field)
 
-        self.desc_field = MDTextField(hint_text="Descrizione")
+        self.desc_field = FormTextField(hint_text="Descrizione")
         box.add_widget(self.desc_field)
 
         # Tipo divisione
@@ -112,7 +111,7 @@ class ExpenseFormScreen(MDScreen):
         if mode == "exact":
             self.exact_fields = {}
             for p in self.participants:
-                field = MDTextField(hint_text=f"Quota di {p.name}", input_filter="float")
+                field = FormTextField(hint_text=f"Quota di {p.name}", input_filter="float")
                 self.exact_fields[p.name] = field
                 self.exact_box.add_widget(field)
             self.exact_box.height = len(self.participants) * 56

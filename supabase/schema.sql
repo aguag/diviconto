@@ -70,8 +70,15 @@ create table if not exists public.trip_members (
     trip_id uuid not null references public.trips(id),
     user_id uuid not null references auth.users(id),
     role    text not null default 'member',
+    email   text,
     primary key (trip_id, user_id)
 );
+
+-- email del membro (per mostrare nell'app con chi è condiviso un viaggio).
+-- Su DB già creati la colonna va aggiunta; il backfill in fondo riempie le righe
+-- preesistenti leggendo auth.users (non accessibile ai client, qui sì: lo script
+-- gira come owner/service_role).
+alter table public.trip_members add column if not exists email text;
 
 create index if not exists idx_participants_trip on public.participants(trip_id);
 create index if not exists idx_expenses_trip on public.expenses(trip_id);
@@ -116,8 +123,9 @@ security definer
 set search_path = public
 as $$
 begin
-    insert into public.trip_members(trip_id, user_id, role)
-    values (new.id, new.owner_id, 'owner')
+    insert into public.trip_members(trip_id, user_id, role, email)
+    values (new.id, new.owner_id, 'owner',
+            (select email from auth.users where id = new.owner_id))
     on conflict do nothing;
     return new;
 end;
@@ -137,8 +145,9 @@ begin
     if tid is null then
         raise exception 'codice non valido';
     end if;
-    insert into public.trip_members(trip_id, user_id, role)
-    values (tid, auth.uid(), 'member')
+    insert into public.trip_members(trip_id, user_id, role, email)
+    values (tid, auth.uid(), 'member',
+            (select email from auth.users where id = auth.uid()))
     on conflict do nothing;
     return tid;
 end;
@@ -222,3 +231,11 @@ create policy splits_all on public.splits
 drop policy if exists members_select on public.trip_members;
 create policy members_select on public.trip_members
     for select using (user_id = auth.uid() or public.is_member(trip_id));
+
+-- ---------------------------------------------------------------------------
+-- Backfill: popola email nelle membership preesistenti (idempotente)
+-- ---------------------------------------------------------------------------
+update public.trip_members m
+set email = u.email
+from auth.users u
+where u.id = m.user_id and (m.email is null or m.email = '');

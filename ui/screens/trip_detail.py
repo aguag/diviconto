@@ -10,11 +10,10 @@ from kivymd.uix.dialog import MDDialog
 from kivymd.uix.label import MDLabel
 from kivymd.uix.list import OneLineListItem, TwoLineListItem
 from kivymd.uix.screen import MDScreen
-from kivymd.uix.textfield import MDTextField
 
 from diviconto import core
 from diviconto.money import format_money
-from ui.widgets import toast
+from ui.widgets import FormTextField, toast
 
 
 def _format_when(iso_ts: str) -> str:
@@ -156,7 +155,7 @@ class TripDetailScreen(MDScreen):
 
     def _edit_description(self, exp):
         self._dialog.dismiss()
-        self._edit_field = MDTextField(text=exp.description, hint_text="Descrizione")
+        self._edit_field = FormTextField(text=exp.description, hint_text="Descrizione")
         self._dialog = MDDialog(
             auto_dismiss=False,
             title="Modifica descrizione",

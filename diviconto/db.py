@@ -79,6 +79,16 @@ CREATE TABLE IF NOT EXISTS sync_state (
     value TEXT NOT NULL
 );
 
+-- Cache di sola lettura dei membri di ogni viaggio (chi vi accede), riempita
+-- dal server a ogni sync. Serve a mostrare nell'app con chi è condiviso un
+-- viaggio; non viene mai inviata al server (no dirty).
+CREATE TABLE IF NOT EXISTS trip_members (
+    trip_id TEXT NOT NULL,
+    email   TEXT NOT NULL,
+    role    TEXT NOT NULL DEFAULT 'member',
+    PRIMARY KEY (trip_id, email)
+);
+
 CREATE INDEX IF NOT EXISTS idx_participants_trip ON participants(trip_id);
 CREATE INDEX IF NOT EXISTS idx_expenses_trip ON expenses(trip_id);
 CREATE INDEX IF NOT EXISTS idx_splits_expense ON splits(expense_id);
@@ -356,6 +366,50 @@ class Database:
     def delete_state(self, key: str) -> None:
         self.conn.execute("DELETE FROM sync_state WHERE key = ?", (key,))
         self.conn.commit()
+
+    def has_synced_data(self) -> bool:
+        """True se esistono righe già sincronizzate (dirty=0), cioè scaricate
+        da un account. Serve a distinguere i dati di un account precedente
+        (da azzerare al cambio utente) dal lavoro offline non ancora inviato."""
+        row = self.conn.execute(
+            "SELECT 1 FROM trips WHERE dirty = 0 LIMIT 1"
+        ).fetchone()
+        return row is not None
+
+    def clear_synced_data(self) -> None:
+        """Svuota tutti i dati dei viaggi e i watermark di pull.
+
+        Usato al cambio account: il DB locale è legato a un solo utente per
+        volta, quindi quando accede un utente diverso si azzera la cache e si
+        riscarica dal server. NON tocca i token di sessione né ``session_user``.
+        L'ordine (figli→genitori) rispetta i vincoli FK locali.
+        """
+        for table in ("splits", "expenses", "participants", "trips", "trip_members"):
+            self.conn.execute(f"DELETE FROM {table}")
+        self.conn.execute("DELETE FROM sync_state WHERE key LIKE 'wm:%'")
+        self.conn.commit()
+
+    def replace_trip_members(self, rows: list[dict]) -> None:
+        """Rimpiazza la cache locale dei membri con quanto arrivato dal server."""
+        self.conn.execute("DELETE FROM trip_members")
+        self.conn.executemany(
+            "INSERT OR IGNORE INTO trip_members (trip_id, email, role) VALUES (?, ?, ?)",
+            [
+                (r.get("trip_id"), r.get("email") or "", r.get("role") or "member")
+                for r in rows
+                if r.get("trip_id") and r.get("email")
+            ],
+        )
+        self.conn.commit()
+
+    def members_by_trip(self) -> dict[str, list[str]]:
+        """Mappa trip_id → email dei membri (per mostrare con chi è condiviso)."""
+        out: dict[str, list[str]] = {}
+        for r in self.conn.execute(
+            "SELECT trip_id, email FROM trip_members WHERE email != '' ORDER BY email"
+        ):
+            out.setdefault(r["trip_id"], []).append(r["email"])
+        return out
 
     # ---- row mappers ------------------------------------------------------
     @staticmethod

@@ -109,7 +109,8 @@ La UI offre: elenco/creazione viaggi, gestione partecipanti, inserimento spese
 obbligatoria**) e schermata bilancio con saldi e pagamenti suggeriti. Ogni spesa
 mostra **data e ora**; toccandola si può **modificare la descrizione** o
 **cancellarla**. Dalla pagina del viaggio si può **Sincronizzare** e
-**Condividere** il codice. Il database è in `~/.config/diviconto/diviconto.db`
+**Condividere** il codice. Nella lista, i viaggi condivisi mostrano una riga
+**"Condiviso con: …"** con le email degli altri membri. Il database è in `~/.config/diviconto/diviconto.db`
 (cartella dati dell'app, valida anche su Android); la variabile `DIVICONTO_DB`
 lo sovrascrive (utile per provare più "dispositivi" sullo stesso PC).
 
@@ -127,6 +128,12 @@ make apk-clean      # svuota la cache .buildozer/ per un build pulito
 Il primo build scarica SDK/NDK (~1.5 GB, lungo); i successivi sono veloci grazie
 alla cache in `.buildozer/`. Nota: il comando accetta automaticamente le licenze
 SDK (`yes |` + `-i`), altrimenti il build fallisce con "aidl not found".
+
+> **Attenzione a `buildozer.spec`:** tutte le chiavi `android.*` (permessi, api,
+> archs…) devono stare sotto la sezione **`[app]`**. Buildozer **non** ha una
+> sezione `[android]`: se ce le metti vengono ignorate e si usano i default —
+> sintomo tipico è l'APK senza permesso INTERNET, con errore di login a Supabase
+> `[Errno 7] No address associated with hostname` (la risoluzione DNS fallisce).
 
 **B) Build nativo su host Fedora** — prerequisiti di sistema (una volta sola):
 ```bash
@@ -150,8 +157,10 @@ La UI può **sincronizzare le spese tra più telefoni**: ogni partecipante acced
 con la propria email e tutti vedono le stesse spese di un viaggio. L'app resta
 **offline-first** — il SQLite locale è sempre la fonte primaria, la sync scambia
 solo le righe cambiate (last-write-wins per riga sull'`updated_at` del server) e
-funziona anche dopo periodi offline. Il modulo di sync usa **solo `urllib`**
-(nessuna dipendenza aggiuntiva, né su desktop né nell'APK).
+funziona anche dopo periodi offline. Il modulo di sync usa **`urllib`** (stdlib)
+per l'HTTP; l'unica dipendenza di terze parti è **`certifi`**, inclusa nell'APK
+solo per fornire il bundle di certificati CA alla verifica TLS (su desktop si
+usano i CA di sistema).
 
 ### Come funziona per gli amici
 - **Chi crea il viaggio** lo apre, tocca **Condividi** e ottiene un **codice**.
@@ -160,6 +169,21 @@ funziona anche dopo periodi offline. Il modulo di sync usa **solo `urllib`**
   è dentro l'app.
 - L'icona **Sincronizza** (in alto nella lista viaggi) invia/scarica i dati; i
   viaggi si sincronizzano anche automaticamente all'apertura.
+- Nella lista, un viaggio condiviso mostra **"Condiviso con: …"** con le email
+  degli altri membri.
+
+### Usare l'app senza account (offline)
+All'avvio si può toccare **"Continua senza account (solo su questo telefono)"**:
+l'app funziona del tutto in locale, senza registrazione né cloud — utile quando
+**un'unica persona tiene i conti** del gruppo sul proprio telefono.
+
+Non è un vicolo cieco: è "**lavora ora, condividi poi**". Se più tardi crei un
+account e accedi, i viaggi creati offline **non vanno persi** — vengono caricati
+sul server (con un messaggio di conferma) e puoi condividerli col codice come
+qualsiasi altro viaggio. Il database locale è legato a **un account per volta**:
+se accede un utente diverso sullo stesso telefono, la cache locale viene azzerata
+e si riscaricano i suoi dati dal server (il lavoro offline non ancora caricato è
+l'unica cosa che andrebbe persa nel passaggio).
 
 ### Setup Supabase (una tantum, lo fa chi gestisce il progetto)
 1. Crea un progetto gratis su [supabase.com](https://supabase.com) (region EU,
@@ -167,7 +191,10 @@ funziona anche dopo periodi offline. Il modulo di sync usa **solo `urllib`**
 2. **Authentication → Sign In / Providers**: abilita **Email**; per i test
    disabilita la **conferma email** (così gli amici accedono subito).
 3. **SQL Editor → New query**: incolla ed esegui [supabase/schema.sql](supabase/schema.sql)
-   (crea tabelle, Row Level Security, trigger e la funzione `join_trip`).
+   (crea tabelle, Row Level Security, trigger e la funzione `join_trip`). È
+   **idempotente**: rieseguendolo dopo un aggiornamento applica le modifiche (es.
+   la colonna `email` in `trip_members`, con backfill, per mostrare con chi è
+   condiviso un viaggio).
 4. **Project Settings → API**: copia **Project URL** e chiave **anon public** e
    mettile in [diviconto/sync_config.py](diviconto/sync_config.py) (oppure nelle
    variabili d'ambiente `SUPABASE_URL` / `SUPABASE_ANON_KEY`).
@@ -181,6 +208,28 @@ Due DB locali separati simulano due telefoni:
 DIVICONTO_DB=/tmp/a.db python main.py   # dispositivo A: accedi, crea viaggio, Condividi
 DIVICONTO_DB=/tmp/b.db python main.py   # dispositivo B: accedi, Unisciti col codice
 ```
+
+### Manutenzione del DB server (amministrazione)
+Lo script [tools/supabase_admin.py](tools/supabase_admin.py) (solo stdlib) serve a
+ispezionare e ripulire il backend — utile per rimuovere le righe-spazzatura
+lasciate dagli utenti usa-e-getta dei test. Usa la chiave **service_role** (che
+bypassa la RLS), letta **solo** da variabile d'ambiente:
+```bash
+export SUPABASE_SERVICE_KEY='...'        # Project Settings → API → service_role 'secret'
+python tools/supabase_admin.py users     # elenca gli utenti Auth
+python tools/supabase_admin.py trips     # elenca i viaggi (owner + conteggi)
+python tools/supabase_admin.py purge-trip <id> --yes     # cancella un viaggio
+python tools/supabase_admin.py purge-user <email> --yes  # cancella utente + suoi viaggi
+```
+I comandi `purge-*` fanno un **dry-run** finché non aggiungi `--yes`.
+
+> **Soft-delete vs hard-delete.** Di default `purge-*` fa un **soft-delete**
+> (`deleted=true`): è l'unico modo che **si propaga ai dispositivi** via sync
+> (al prossimo sync l'app nasconde il viaggio ovunque). L'opzione `--hard` rimuove
+> fisicamente la riga: NON si propaga (un dispositivo offline-first non "vede" una
+> riga sparita e può perfino ricrearla col push successivo se la sua copia è
+> `dirty`), quindi va usata **solo** per la spazzatura di account usa-e-getta.
+> Non mettere mai la `service_role` né la password del DB nell'app o su git.
 
 ## Installazione CLI (opzionale)
 ```bash
@@ -210,9 +259,9 @@ python -m unittest discover -s tests   # comando diretto (anche su Termux)
 - `diviconto/sync_config.py` — URL e chiave anon del progetto Supabase
 - `supabase/schema.sql` — schema, RLS e funzioni lato server (da eseguire una volta)
 - `ui/` — interfaccia grafica Kivy/KivyMD (solo presentazione; richiama `core`)
+- `tools/supabase_admin.py` — manutenzione del DB server (service_role; vedi sopra)
 - `main.py` — entry point della UI; `buildozer.spec` — build Android
 
 Dettagli tecnici in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md).
 
-I prossimi passi previsti: modifica/cancellazione di spese dalla UI,
-sync in tempo reale, divisione per percentuale/quote.
+I prossimi passi previsti: sync in tempo reale e divisione per percentuale/quote.

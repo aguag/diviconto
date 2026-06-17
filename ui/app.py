@@ -12,6 +12,7 @@ import os
 import threading
 
 from kivy.clock import Clock
+from kivy.core.window import Window
 from kivy.lang import Builder
 from kivy.uix.screenmanager import ScreenManager, SlideTransition
 from kivymd.app import MDApp
@@ -29,9 +30,23 @@ KV_PATH = os.path.join(os.path.dirname(__file__), "diviconto.kv")
 class DiviContoApp(MDApp):
     """App principale: tiene il DB aperto e gestisce schermate e sync."""
 
+    def load_kv(self, *args, **kwargs):
+        # Disattiva l'auto-load del kv di Kivy: dal nome "DiviContoApp" deriva
+        # "diviconto.kv" e caricava il file una SECONDA volta (con un percorso
+        # diverso da KV_PATH, quindi senza essere riconosciuto come già
+        # caricato). Le regole <Screen> finivano applicate due volte e ogni
+        # schermata veniva disegnata duplicata e sfalsata. Carichiamo il kv una
+        # sola volta, esplicitamente, in build().
+        return False
+
     def build(self):
         self.theme_cls.primary_palette = "Teal"
         self.theme_cls.theme_style = "Light"
+
+        # Su Android, all'apertura della tastiera scorre la vista per tenere il
+        # campo a fuoco sopra la tastiera (altrimenti i campi in basso, es. la
+        # descrizione della spesa, restano coperti).
+        Window.softinput_mode = "below_target"
 
         # Default: DB nella cartella dati dell'app (valida anche su Android).
         # La variabile DIVICONTO_DB la sovrascrive (utile per test/più "dispositivi").
