@@ -17,7 +17,7 @@ class TestCliEndToEnd(unittest.TestCase):
         os.unlink(self.db)
 
     def run_cli(self, *args):
-        cmd = [sys.executable, "-m", "diviconto", "--db", self.db, *args]
+        cmd = [sys.executable, "-m", "src", "--db", self.db, *args]
         return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
 
     def test_help(self):

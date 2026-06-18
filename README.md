@@ -15,7 +15,7 @@ Senza installazione, dalla cartella del progetto:
 
 ```bash
 ./divc -h                  # help generale
-python -m diviconto -h     # equivalente
+python -m src -h           # equivalente
 ```
 
 Help di ogni sottocomando con `-h`, es. `./divc expense add -h`.
@@ -196,7 +196,7 @@ l'unica cosa che andrebbe persa nel passaggio).
    la colonna `email` in `trip_members`, con backfill, per mostrare con chi è
    condiviso un viaggio).
 4. **Project Settings → API**: copia **Project URL** e chiave **anon public** e
-   mettile in [diviconto/sync_config.py](diviconto/sync_config.py) (oppure nelle
+   mettile in [src/sync_config.py](src/sync_config.py) (oppure nelle
    variabili d'ambiente `SUPABASE_URL` / `SUPABASE_ANON_KEY`).
 
 > La chiave **anon** è pubblica (protetta dalla RLS): è normale includerla
@@ -249,14 +249,14 @@ python -m unittest discover -s tests   # comando diretto (anche su Termux)
 ```
 
 ## Architettura
-- `diviconto/money.py` — importi con `Decimal` e conversione valuta
-- `diviconto/models.py` — dataclasses del dominio
-- `diviconto/db.py` — storage SQLite (unico punto di persistenza)
-- `diviconto/balance.py` — saldi netti + pagamenti di pareggio
-- `diviconto/core.py` — logica di business (riusata da CLI e UI)
-- `diviconto/cli.py` — interfaccia a riga di comando
-- `diviconto/sync.py` — sincronizzazione con Supabase (push/pull, auth)
-- `diviconto/sync_config.py` — URL e chiave anon del progetto Supabase
+- `src/money.py` — importi con `Decimal` e conversione valuta
+- `src/models.py` — dataclasses del dominio
+- `src/db.py` — storage SQLite (unico punto di persistenza)
+- `src/balance.py` — saldi netti + pagamenti di pareggio
+- `src/core.py` — logica di business (riusata da CLI e UI)
+- `src/cli.py` — interfaccia a riga di comando
+- `src/sync.py` — sincronizzazione con Supabase (push/pull, auth)
+- `src/sync_config.py` — URL e chiave anon del progetto Supabase
 - `supabase/schema.sql` — schema, RLS e funzioni lato server (da eseguire una volta)
 - `ui/` — interfaccia grafica Kivy/KivyMD (solo presentazione; richiama `core`)
 - `tools/supabase_admin.py` — manutenzione del DB server (service_role; vedi sopra)
@@ -264,4 +264,3 @@ python -m unittest discover -s tests   # comando diretto (anche su Termux)
 
 Dettagli tecnici in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md).
 
-I prossimi passi previsti: sync in tempo reale e divisione per percentuale/quote.

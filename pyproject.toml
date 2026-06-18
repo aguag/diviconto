@@ -18,7 +18,7 @@ ui = [
 ]
 
 [project.scripts]
-diviconto = "diviconto.cli:main"
+diviconto = "src.cli:main"
 
 [tool.setuptools]
-packages = ["diviconto", "ui", "ui.screens"]
+packages = ["src", "ui", "ui.screens"]

@@ -1,4 +1,4 @@
-"""Test della sincronizzazione (diviconto/sync.py).
+"""Test della sincronizzazione (src/sync.py).
 
 Si usa un finto Supabase in memoria che intercetta le richieste HTTP a livello
 di ``SyncClient._http``: così la logica reale di push/pull/watermark/auth viene
@@ -13,9 +13,9 @@ import unittest
 import urllib.parse
 import uuid
 
-from diviconto import core
-from diviconto.db import Database
-from diviconto.sync import SyncClient, SyncError
+from src import core
+from src.db import Database
+from src.sync import SyncClient, SyncError
 
 
 class FakeSupabase:

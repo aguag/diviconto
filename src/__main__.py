@@ -1,4 +1,4 @@
-"""Entry point per ``python -m diviconto``."""
+"""Entry point per ``python -m src``."""
 
 from .cli import main
 

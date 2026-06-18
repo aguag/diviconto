@@ -11,7 +11,7 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
 
-from diviconto import core
+from src import core
 from ui.widgets import FormTextField, toast
 
 

@@ -29,7 +29,7 @@ Tipo di cancellazione:
     SOLO per la spazzatura di utenti usa-e-getta dei test.
     Con ``purge-user`` la rimozione dell'utente Auth avviene solo con ``--hard``.
 
-L'URL del progetto si prende da ``diviconto.sync_config`` (sovrascrivibile con
+L'URL del progetto si prende da ``src.sync_config`` (sovrascrivibile con
 la variabile d'ambiente ``SUPABASE_URL``).
 """
 
@@ -48,7 +48,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # URL del progetto (riusa la configurazione dell'app; rispetta SUPABASE_URL).
 try:
-    from diviconto.sync_config import SUPABASE_URL
+    from src.sync_config import SUPABASE_URL
 except Exception:  # se eseguito fuori dalla root del progetto
     SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 

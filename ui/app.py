@@ -1,6 +1,6 @@
 """Applicazione Kivy/KivyMD di DiviConto.
 
-Apre un'unica connessione al DB (riusando ``diviconto.db.Database``) salvato
+Apre un'unica connessione al DB (riusando ``src.db.Database``) salvato
 nella cartella dati dell'app, scrivibile sia su Linux sia su Android. Gestisce
 anche il client di sincronizzazione (Supabase) e un helper per eseguire le
 operazioni di rete fuori dal thread della UI.
@@ -17,8 +17,8 @@ from kivy.lang import Builder
 from kivy.uix.screenmanager import ScreenManager, SlideTransition
 from kivymd.app import MDApp
 
-from diviconto.db import Database
-from diviconto.sync import SyncClient
+from src.db import Database
+from src.sync import SyncClient
 from ui.screens.auth import AuthScreen
 from ui.screens.expense_form import ExpenseFormScreen
 from ui.screens.trip_detail import TripDetailScreen

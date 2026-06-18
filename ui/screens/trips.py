@@ -9,7 +9,7 @@ from kivymd.uix.dialog import MDDialog
 from kivymd.uix.list import ThreeLineListItem, TwoLineListItem
 from kivymd.uix.screen import MDScreen
 
-from diviconto import core
+from src import core
 from ui.widgets import FormTextField, toast
 
 

@@ -1,7 +1,7 @@
 import unittest
 from decimal import Decimal
 
-from diviconto.money import convert, format_money, to_money, to_rate
+from src.money import convert, format_money, to_money, to_rate
 
 
 class TestMoney(unittest.TestCase):
