@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Wrapper eseguibile: lancia la UI di DiviConto (Kivy/KivyMD) col Python del
+# venv del progetto, dove sono installate le dipendenze UI.
+#
+# La UI, a differenza della CLI, richiede Kivy/KivyMD: NON gira col Python di
+# sistema. Questo wrapper usa sempre l'interprete di .venv, da qualunque cartella
+# venga lanciato.
+#
+# Uso:  ./divui            (anche: DIVICONTO_DB=/tmp/a.db ./divui)
+set -e
+cd "$(dirname "$0")"
+
+PY=.venv/bin/python
+if [ ! -x "$PY" ]; then
+    echo "Errore: venv non trovato in .venv/" >&2
+    echo "Crealo con:" >&2
+    echo "  python -m venv .venv && .venv/bin/pip install -r requirements-ui.txt" >&2
+    exit 1
+fi
+
+exec "$PY" main.py "$@"

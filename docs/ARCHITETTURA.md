@@ -35,14 +35,14 @@ business è indipendente sia dall'interfaccia (CLI e UI Kivy) sia dallo storage
 
 | Modulo | Responsabilità | Note |
 |--------|----------------|------|
-| [money.py](../src/money.py) | Importi `Decimal`, arrotondamento a 2 cifre, conversione valuta | Mai `float` per i soldi |
-| [models.py](../src/models.py) | Dataclasses: `Trip`, `Participant`, `Expense`, `Split`, `Balance`, `Settlement` | Solo dati |
-| [db.py](../src/db.py) | Schema, CRUD, mapping riga↔oggetto | **Unico punto di persistenza** |
-| [balance.py](../src/balance.py) | Saldi netti + settlement greedy | Funzioni pure |
-| [core.py](../src/core.py) | Orchestrazione: crea viaggio, aggiungi spesa, calcola bilancio | Solleva `ValueError`, non stampa |
-| [cli.py](../src/cli.py) | Parsing argomenti e output | Strato sottile su `core` |
-| [sync.py](../src/sync.py) | Sincronizzazione con Supabase (auth + push/pull) | HTTP con `urllib` (stdlib); `certifi` solo per i CA su Android |
-| [sync_config.py](../src/sync_config.py) | URL + chiave anon del progetto Supabase | Valori pubblici, override da env |
+| [money.py](../diviconto/money.py) | Importi `Decimal`, arrotondamento a 2 cifre, conversione valuta | Mai `float` per i soldi |
+| [models.py](../diviconto/models.py) | Dataclasses: `Trip`, `Participant`, `Expense`, `Split`, `Balance`, `Settlement` | Solo dati |
+| [db.py](../diviconto/db.py) | Schema, CRUD, mapping riga↔oggetto | **Unico punto di persistenza** |
+| [balance.py](../diviconto/balance.py) | Saldi netti + settlement greedy | Funzioni pure |
+| [core.py](../diviconto/core.py) | Orchestrazione: crea viaggio, aggiungi spesa, calcola bilancio | Solleva `ValueError`, non stampa |
+| [cli.py](../diviconto/cli.py) | Parsing argomenti e output | Strato sottile su `core` |
+| [sync.py](../diviconto/sync.py) | Sincronizzazione con Supabase (auth + push/pull) | HTTP con `urllib` (stdlib); `certifi` solo per i CA su Android |
+| [sync_config.py](../diviconto/sync_config.py) | URL + chiave anon del progetto Supabase | Valori pubblici, override da env |
 | [tools/supabase_admin.py](../tools/supabase_admin.py) | Manutenzione DB server (elenco/purge) via `service_role` | Solo stdlib; chiave da env; dry-run di default |
 
 ## Modello dati
@@ -88,7 +88,7 @@ l'importo della spesa e i netti sommano a zero.
 ## Sincronizzazione (Supabase)
 
 Backend **offline-first**: il SQLite locale resta la fonte primaria; il sync
-scambia solo le righe cambiate. Lo strato è in [sync.py](../src/sync.py)
+scambia solo le righe cambiate. Lo strato è in [sync.py](../diviconto/sync.py)
 (classe `SyncClient`) e usa **solo `urllib`** (nessuna dipendenza nuova, identico
 su desktop e Android). Schema server in [supabase/schema.sql](../supabase/schema.sql).
 

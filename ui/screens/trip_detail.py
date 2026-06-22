@@ -11,8 +11,8 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.list import OneLineListItem, TwoLineListItem
 from kivymd.uix.screen import MDScreen
 
-from src import core
-from src.money import format_money
+from diviconto import core
+from diviconto.money import format_money
 from ui.widgets import FormTextField, toast
 
 

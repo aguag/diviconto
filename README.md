@@ -1,10 +1,11 @@
 # DiviConto
 
-CLI per dividere le spese di un viaggio tra amici. Scritta in **Python con
-sola libreria standard** (nessuna dipendenza esterna) → gira su **Linux
-(Fedora 41)** e su **Android via Termux**. I dati sono salvati in un DB
-**SQLite** locale, con un'architettura predisposta per una futura
-sincronizzazione tra dispositivi e per una UI.
+**DiviConto** divide le spese di un viaggio tra amici. Offre una **CLI**
+(Python, **sola libreria standard** — il core non ha dipendenze) e una **UI
+grafica** (Kivy/KivyMD) che gira su **Linux (Fedora 41)** e su **Android (APK)**,
+con **sincronizzazione tra dispositivi** opzionale (Supabase, *offline-first*).
+I dati stanno in un DB **SQLite** locale; la sync scambia solo le righe cambiate
+e funziona anche dopo periodi offline. La CLI gira anche su **Android via Termux**.
 
 ## Requisiti
 - Python 3.9+ (su Fedora già presente; su Android: `pkg install python` in Termux)
@@ -14,8 +15,8 @@ sincronizzazione tra dispositivi e per una UI.
 Senza installazione, dalla cartella del progetto:
 
 ```bash
-./divc -h                  # help generale
-python -m src -h           # equivalente
+./divc -h                # help generale
+python -m diviconto -h   # equivalente
 ```
 
 Help di ogni sottocomando con `-h`, es. `./divc expense add -h`.
@@ -196,7 +197,7 @@ l'unica cosa che andrebbe persa nel passaggio).
    la colonna `email` in `trip_members`, con backfill, per mostrare con chi è
    condiviso un viaggio).
 4. **Project Settings → API**: copia **Project URL** e chiave **anon public** e
-   mettile in [src/sync_config.py](src/sync_config.py) (oppure nelle
+   mettile in [diviconto/sync_config.py](diviconto/sync_config.py) (oppure nelle
    variabili d'ambiente `SUPABASE_URL` / `SUPABASE_ANON_KEY`).
 
 > La chiave **anon** è pubblica (protetta dalla RLS): è normale includerla
@@ -232,10 +233,26 @@ I comandi `purge-*` fanno un **dry-run** finché non aggiungi `--yes`.
 > Non mettere mai la `service_role` né la password del DB nell'app o su git.
 
 ## Installazione CLI (opzionale)
+
+Per avere il comando `diviconto` disponibile ovunque, **conviene `pipx`**: installa
+l'app in un venv **isolato** e ne espone solo il comando nel PATH, senza sporcare
+il tuo ambiente Python.
+
 ```bash
-pip install --user .
+pipx install .            # crea un venv dedicato e mette `diviconto` nel PATH
 diviconto -h
+pipx uninstall diviconto  # rimozione pulita
 ```
+(pipx si installa una volta: su Fedora `sudo dnf install pipx`, altrimenti
+`pip install --user pipx`.)
+
+> Evita `pip install --user .`: oltre a `diviconto` installerebbe nel tuo
+> *user site-packages* anche il package top-level **`ui`** (nome generico →
+> rischio di collisione con altri progetti). `pipx`, isolando tutto in un venv
+> dedicato, elimina il problema.
+>
+> Per **sviluppare** non serve installare nulla: usa il venv del progetto e
+> lancia `./divc`, `python -m diviconto` o la UI con `python main.py`.
 
 ## Test
 ```bash
@@ -249,14 +266,14 @@ python -m unittest discover -s tests   # comando diretto (anche su Termux)
 ```
 
 ## Architettura
-- `src/money.py` — importi con `Decimal` e conversione valuta
-- `src/models.py` — dataclasses del dominio
-- `src/db.py` — storage SQLite (unico punto di persistenza)
-- `src/balance.py` — saldi netti + pagamenti di pareggio
-- `src/core.py` — logica di business (riusata da CLI e UI)
-- `src/cli.py` — interfaccia a riga di comando
-- `src/sync.py` — sincronizzazione con Supabase (push/pull, auth)
-- `src/sync_config.py` — URL e chiave anon del progetto Supabase
+- `diviconto/money.py` — importi con `Decimal` e conversione valuta
+- `diviconto/models.py` — dataclasses del dominio
+- `diviconto/db.py` — storage SQLite (unico punto di persistenza)
+- `diviconto/balance.py` — saldi netti + pagamenti di pareggio
+- `diviconto/core.py` — logica di business (riusata da CLI e UI)
+- `diviconto/cli.py` — interfaccia a riga di comando
+- `diviconto/sync.py` — sincronizzazione con Supabase (push/pull, auth)
+- `diviconto/sync_config.py` — URL e chiave anon del progetto Supabase
 - `supabase/schema.sql` — schema, RLS e funzioni lato server (da eseguire una volta)
 - `ui/` — interfaccia grafica Kivy/KivyMD (solo presentazione; richiama `core`)
 - `tools/supabase_admin.py` — manutenzione del DB server (service_role; vedi sopra)

@@ -1,11 +1,11 @@
 import unittest
 from decimal import Decimal
 
-from src.core import (
+from diviconto.core import (
     SplitSpec, add_expense, add_participant, compute_balance, create_trip,
     delete_expense, update_expense_description,
 )
-from src.db import Database
+from diviconto.db import Database
 
 
 class CoreTestBase(unittest.TestCase):

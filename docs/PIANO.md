@@ -29,15 +29,15 @@ Perché Python (non C):
 
 ## Architettura (a strati, per riusare il core con UI e sync futuri)
 
-Package `src/` (storicamente chiamato `diviconto/`):
+Package `diviconto/`:
 - `money.py` — helper `Decimal`, arrotondamento a 2 decimali, conversione `amount * rate → base`.
 - `models.py` — dataclasses: `Trip`, `Participant`, `Expense`, `Split`.
 - `db.py` — connessione SQLite, creazione schema/migrazioni, repository (CRUD). **Unico punto che tocca lo storage** → in futuro si sostituisce/affianca con un backend sync senza toccare il resto.
 - `core.py` — logica di business pura (crea viaggio, aggiungi partecipante/spesa, calcola balance). Nessun `print` → riusabile dalla UI.
 - `balance.py` — calcolo saldo netto + algoritmo greedy dei pagamenti minimi (chi paga chi).
 - `cli.py` — strato sottile su `core` con `argparse` (sottocomandi + `-h`).
-- `__main__.py` — permette `python -m src`.
-- Script wrapper `divc` (eseguibile) in root.
+- `__main__.py` — permette `python -m diviconto`.
+- Script wrapper `divc` (eseguibile) in root (il nome `diviconto` è già la cartella del package).
 
 ### Scelte pro-sync futura (a costo quasi zero ora)
 - **PK come UUID testo** (non autoincrement) → niente collisioni di id tra dispositivi quando si introdurrà il merge.

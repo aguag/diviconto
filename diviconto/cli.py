@@ -1,6 +1,6 @@
 """Interfaccia a riga di comando di DiviConto.
 
-Strato sottile su :mod:`src.core`. Usa argparse, quindi ``-h`` è
+Strato sottile su :mod:`diviconto.core`. Usa argparse, quindi ``-h`` è
 disponibile automaticamente sia globalmente sia per ogni sottocomando.
 """
 

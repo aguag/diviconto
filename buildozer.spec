@@ -5,11 +5,11 @@ title = DiviConto
 package.name = diviconto
 package.domain = org.diviconto
 
-# Sorgenti: la root del progetto (include sia ui/ sia il core src/)
+# Sorgenti: la root del progetto (include sia ui/ sia il core diviconto/)
 source.dir = .
 source.include_exts = py,kv,png,jpg,jpeg,ttf,atlas
 # Includi esplicitamente i package Python necessari
-source.include_patterns = ui/*,ui/screens/*,src/*
+source.include_patterns = ui/*,ui/screens/*,diviconto/*
 
 # File principale avviato sul dispositivo
 # (Buildozer cerca main.py nella source.dir)
