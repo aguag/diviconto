@@ -411,6 +411,53 @@ class Database:
             out.setdefault(r["trip_id"], []).append(r["email"])
         return out
 
+    def trip_members_detail(self, trip_id: str) -> list[dict]:
+        """Membri di un viaggio con ruolo ({email, role}), per la UI di gestione."""
+        rows = self.conn.execute(
+            "SELECT email, role FROM trip_members WHERE trip_id = ? AND email != '' "
+            "ORDER BY role DESC, email",
+            (trip_id,),
+        ).fetchall()
+        return [{"email": r["email"], "role": r["role"]} for r in rows]
+
+    def delete_trip(self, trip_id: str) -> None:
+        """Soft-delete dell'intero viaggio (trip + figli) come tombstone dirty.
+
+        Si propaga via sync (deleted=true) → il viaggio sparisce per tutti i
+        membri. Usata dall'owner per cancellare il viaggio.
+        """
+        ts = now_iso()
+        self.conn.execute(
+            "UPDATE splits SET deleted = 1, updated_at = ?, dirty = 1 "
+            "WHERE expense_id IN (SELECT id FROM expenses WHERE trip_id = ?)",
+            (ts, trip_id),
+        )
+        for table in ("expenses", "participants"):
+            self.conn.execute(
+                f"UPDATE {table} SET deleted = 1, updated_at = ?, dirty = 1 WHERE trip_id = ?",
+                (ts, trip_id),
+            )
+        self.conn.execute(
+            "UPDATE trips SET deleted = 1, updated_at = ?, dirty = 1 WHERE id = ?",
+            (ts, trip_id),
+        )
+        self.conn.commit()
+
+    def drop_trip_local(self, trip_id: str) -> None:
+        """Rimuove un viaggio SOLO dal DB locale, senza tombstone (non si propaga).
+
+        Per "abbandona": tolgo la mia copia, ma il viaggio resta per gli altri
+        (la mia membership sul server la rimuove la RPC ``leave_trip``).
+        """
+        self.conn.execute(
+            "DELETE FROM splits WHERE expense_id IN (SELECT id FROM expenses WHERE trip_id = ?)",
+            (trip_id,),
+        )
+        for table in ("expenses", "participants", "trip_members"):
+            self.conn.execute(f"DELETE FROM {table} WHERE trip_id = ?", (trip_id,))
+        self.conn.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
+        self.conn.commit()
+
     # ---- row mappers ------------------------------------------------------
     @staticmethod
     def _row_to_trip(r: sqlite3.Row) -> Trip:

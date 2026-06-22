@@ -197,6 +197,38 @@ class SyncClient:
             return rows[0].get("share_code")
         return None
 
+    def leave_trip(self, trip_id: str) -> None:
+        """Abbandona un viaggio: rimuove la membership sul server e la copia locale.
+
+        Non è un soft-delete: il viaggio resta per gli altri membri; sparisce solo
+        da questo dispositivo.
+        """
+        if not self.is_logged_in():
+            raise SyncError("devi accedere per abbandonare un viaggio")
+        self._request("POST", "/rest/v1/rpc/leave_trip", body={"tid": trip_id})
+        self.db.drop_trip_local(trip_id)
+
+    def remove_member(self, trip_id: str, email: str) -> None:
+        """L'owner rimuove un membro (per email), poi rilegge i membri."""
+        if not self.is_logged_in():
+            raise SyncError("devi accedere per gestire i membri")
+        self._request(
+            "POST", "/rest/v1/rpc/remove_member",
+            body={"tid": trip_id, "member_email": email.strip()},
+        )
+        self._pull_members()
+
+    def revoke_sharing(self, trip_id: str) -> Optional[str]:
+        """L'owner revoca la condivisione a tutti e rigenera il codice.
+
+        Ritorna il nuovo share_code (il vecchio smette di funzionare).
+        """
+        if not self.is_logged_in():
+            raise SyncError("devi accedere per gestire la condivisione")
+        code = self._request("POST", "/rest/v1/rpc/revoke_sharing", body={"tid": trip_id})
+        self._pull_members()
+        return code
+
     def _push(self, table: str) -> None:
         rows = self.db.dirty_rows(table)
         if not rows:

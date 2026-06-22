@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from kivymd.app import MDApp
+from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.label import MDLabel
@@ -104,6 +105,155 @@ class TripDetailScreen(MDScreen):
         from kivy.core.clipboard import Clipboard
         Clipboard.copy(code)
         toast("Codice copiato")
+
+    # ---- Gestione viaggio / condivisione ---------------------------------
+    def _my_role(self):
+        """('owner' | 'member' | 'owner'-per-default) per il viaggio corrente.
+
+        Senza cache membri (viaggio locale non ancora condiviso) → owner: l'hai
+        creato tu. Altrimenti si guarda il ruolo della propria email.
+        """
+        app = MDApp.get_running_app()
+        members = app.db.trip_members_detail(app.current_trip.id)
+        if not members:
+            return "owner", []
+        me = app.sync.current_user()
+        mine = next((m["role"] for m in members if m["email"] == me), None)
+        others = [m["email"] for m in members if m["email"] != me]
+        return (mine or "member"), others
+
+    def open_trip_menu(self):
+        role, others = self._my_role()
+        rows = MDBoxLayout(orientation="vertical", spacing="4dp",
+                           adaptive_height=True, size_hint_y=None)
+        rows.height = 0
+
+        def add_btn(text, cb):
+            b = MDRaisedButton(text=text, pos_hint={"center_x": .5})
+            b.bind(on_release=lambda *_: cb())
+            rows.add_widget(b)
+            rows.height += 56
+
+        if role == "owner":
+            add_btn("Elimina viaggio", self._confirm_delete_trip)
+            if others:
+                add_btn("Gestisci condivisione", self._open_share_management)
+        else:
+            add_btn("Abbandona viaggio", self._confirm_leave_trip)
+
+        self._dialog = MDDialog(
+            auto_dismiss=False, title="Viaggio", type="custom", content_cls=rows,
+            buttons=[MDFlatButton(text="Chiudi", on_release=lambda *_: self._dialog.dismiss())],
+        )
+        self._dialog.open()
+
+    def _confirm_delete_trip(self):
+        self._dialog.dismiss()
+        self._confirm("Eliminare il viaggio?",
+                      "Sparirà per tutti i partecipanti alla prossima sincronizzazione.",
+                      self._do_delete_trip)
+
+    def _do_delete_trip(self):
+        app = MDApp.get_running_app()
+        trip = app.current_trip
+        core.delete_trip(app.db, trip.id)
+        toast("Viaggio eliminato")
+        self.manager.current = "trips"
+        self.manager.get_screen("trips").refresh()
+        if app.sync.is_logged_in():  # propaga subito, se possibile
+            app.run_async(app.sync.sync, lambda _r: None, lambda _e: None)
+
+    def _confirm_leave_trip(self):
+        self._dialog.dismiss()
+        app = MDApp.get_running_app()
+        if not app.sync.is_logged_in():
+            toast("Accedi per abbandonare il viaggio")
+            return
+        self._confirm("Abbandonare il viaggio?",
+                      "Verrà rimosso da questo dispositivo; resta per gli altri.",
+                      self._do_leave_trip)
+
+    def _do_leave_trip(self):
+        app = MDApp.get_running_app()
+        trip_id = app.current_trip.id
+
+        def done(_):
+            toast("Hai abbandonato il viaggio")
+            self.manager.current = "trips"
+            self.manager.get_screen("trips").refresh()
+
+        toast("Esco dal viaggio…")
+        app.run_async(lambda: app.sync.leave_trip(trip_id), done, lambda exc: toast(str(exc)))
+
+    def _open_share_management(self):
+        self._dialog.dismiss()
+        app = MDApp.get_running_app()
+        _role, others = self._my_role()
+        box = MDBoxLayout(orientation="vertical", spacing="6dp",
+                          adaptive_height=True, size_hint_y=None)
+        box.height = 0
+        for email in others:
+            row = MDBoxLayout(orientation="horizontal", size_hint_y=None, height="44dp", spacing="8dp")
+            row.add_widget(MDLabel(text=email, valign="center", shorten=True))
+            btn = MDFlatButton(text="Rimuovi", theme_text_color="Error")
+            btn.bind(on_release=lambda _w, e=email: self._do_remove_member(e))
+            row.add_widget(btn)
+            box.add_widget(row)
+            box.height += 50
+        revoke = MDRaisedButton(text="Revoca a tutti + nuovo codice", pos_hint={"center_x": .5})
+        revoke.bind(on_release=lambda *_: self._confirm_revoke())
+        box.add_widget(revoke)
+        box.height += 56
+        self._dialog = MDDialog(
+            auto_dismiss=False, title="Gestisci condivisione", type="custom", content_cls=box,
+            buttons=[MDFlatButton(text="Chiudi", on_release=lambda *_: self._dialog.dismiss())],
+        )
+        self._dialog.open()
+
+    def _do_remove_member(self, email):
+        self._dialog.dismiss()
+        app = MDApp.get_running_app()
+        trip_id = app.current_trip.id
+
+        def done(_):
+            toast(f"Rimosso {email}")
+            self.refresh_all()
+
+        toast("Rimuovo…")
+        app.run_async(lambda: app.sync.remove_member(trip_id, email), done,
+                      lambda exc: toast(str(exc)))
+
+    def _confirm_revoke(self):
+        self._dialog.dismiss()
+        self._confirm("Revocare la condivisione a tutti?",
+                      "Gli altri membri vengono rimossi e il codice rigenerato "
+                      "(il vecchio non funzionerà più).",
+                      self._do_revoke)
+
+    def _do_revoke(self):
+        app = MDApp.get_running_app()
+        trip_id = app.current_trip.id
+
+        def done(newcode):
+            toast(f"Condivisione revocata. Nuovo codice: {newcode}")
+            self.refresh_all()
+
+        toast("Revoco…")
+        app.run_async(lambda: app.sync.revoke_sharing(trip_id), done,
+                      lambda exc: toast(str(exc)))
+
+    def _confirm(self, title, text, on_yes):
+        self._dialog = MDDialog(
+            auto_dismiss=False, title=title, text=text,
+            buttons=[
+                MDFlatButton(text="Annulla", on_release=lambda *_: self._dialog.dismiss()),
+                MDRaisedButton(
+                    text="Conferma",
+                    on_release=lambda *_: (self._dialog.dismiss(), on_yes()),
+                ),
+            ],
+        )
+        self._dialog.open()
 
     # ---- Spese -----------------------------------------------------------
     def refresh_expenses(self):

@@ -40,10 +40,10 @@ business è indipendente sia dall'interfaccia (CLI e UI Kivy) sia dallo storage
 | [db.py](../diviconto/db.py) | Schema, CRUD, mapping riga↔oggetto | **Unico punto di persistenza** |
 | [balance.py](../diviconto/balance.py) | Saldi netti + settlement greedy | Funzioni pure |
 | [core.py](../diviconto/core.py) | Orchestrazione: crea viaggio, aggiungi spesa, calcola bilancio | Solleva `ValueError`, non stampa |
-| [cli.py](../diviconto/cli.py) | Parsing argomenti e output | Strato sottile su `core` |
+| [cli.py](../diviconto/cli.py) | Parsing argomenti e output (comandi locali + `admin`) | Strato sottile su `core`/`admin` |
 | [sync.py](../diviconto/sync.py) | Sincronizzazione con Supabase (auth + push/pull) | HTTP con `urllib` (stdlib); `certifi` solo per i CA su Android |
 | [sync_config.py](../diviconto/sync_config.py) | URL + chiave anon del progetto Supabase | Valori pubblici, override da env |
-| [tools/supabase_admin.py](../tools/supabase_admin.py) | Manutenzione DB server (elenco/purge) via `service_role` | Solo stdlib; chiave da env; dry-run di default |
+| [admin.py](../diviconto/admin.py) | Manutenzione cloud (`divc admin`: login/elenco/purge) | Solo stdlib; login come **utente admin** (anon + sessione salvata), non service_role; dry-run di default |
 
 ## Modello dati
 
@@ -122,7 +122,7 @@ su desktop e Android). Schema server in [supabase/schema.sql](../supabase/schema
 > loro copia locale (e una copia `dirty` la ricrea al push successivo). Per far
 > sparire un dato ovunque si deve marcare `deleted=true` (il trigger aggiorna
 > `updated_at`, il pull lo propaga, `list_*` filtra `deleted=0`). Vale anche per
-> la manutenzione lato server: vedi `tools/supabase_admin.py` (soft-delete di
+> la manutenzione lato server: vedi `diviconto/admin.py` / `divc admin` (soft-delete di
 > default, `--hard` solo per spazzatura di account usa-e-getta).
 
 ### Un account per volta nel DB locale
@@ -169,6 +169,25 @@ aggiunge un membro tramite il codice condiviso. Le policy di `trips` includono
 al primo upsert la membership owner non è ancora visibile (creata da un trigger
 AFTER INSERT) e senza quella clausola SELECT/UPDATE fallirebbero.
 
+**Gestione condivisione/appartenenza** (cancella/rimuovi/abbandona): la
+**cancellazione** del viaggio è una soft-delete lato client dell'owner (tombstone
+`deleted=true` che si propaga via sync). Le altre operazioni sono RPC *SECURITY
+DEFINER* col controllo dei permessi dentro: `leave_trip(tid)` (un membro rimuove
+la propria membership; l'app poi elimina la copia locale con `drop_trip_local`,
+senza tombstone così non tocca gli altri), `remove_member(tid, email)` (solo
+owner) e `revoke_sharing(tid)` (solo owner: rimuove tutti gli altri membri e
+rigenera lo `share_code`). Limite offline-first: rimuovere un membro gli revoca i
+sync futuri ma **non** cancella la copia già scaricata sul suo dispositivo.
+
+**Admin** (per `divc admin`): un utente è amministratore se il suo id è nella
+tabella `admins` (popolata solo dalla dashboard; nessuna policy di scrittura, così
+non ci si auto-promuove). Le policy delle tabelle dati includono `or is_admin(...)`
+→ un admin loggato (account Auth normale, non service_role) ha accesso esteso a
+tutto. Gli utenti Auth, non esposti via RLS, si gestiscono con RPC *SECURITY
+DEFINER* protette da `is_admin`: `am_i_admin()`, `admin_list_users()`,
+`admin_delete_user(uid)`. NB: per la RLS estesa, un account admin vede tutti i
+dati anche nell'app normale → usarne uno dedicato.
+
 ## UI: tastiera software su Android
 
 Due accorgimenti in `ui/` per la scrittura nei form su Android:
@@ -186,8 +205,6 @@ Due accorgimenti in `ui/` per la scrittura nei form su Android:
 - **Nuovi criteri di divisione** (`%`, quote): aggiungere un `mode` e la logica
   in `core._build_splits`; lo schema regge già (`splits.mode` + `share_base`).
 - **Sync in tempo reale** (Supabase Realtime) al posto del sync manuale/su apertura.
-- **Cancellazione di un viaggio dalla UI** (oggi si modifica/cancella la singola
-  spesa; lo schema con `deleted`/`updated_at` è già pronto a propagarlo).
 
 ## Test
 
@@ -199,6 +216,8 @@ Due accorgimenti in `ui/` per la scrittura nei form su Android:
   (azzeramento cache), unione a un viaggio "vecchio", membri condivisi e flusso
   offline→carica→condividi, con un finto Supabase in memoria (intercetta
   `SyncClient._http`, più client con DB distinti)
+- `test_admin.py` — comandi `admin`: dry-run, soft-delete (PATCH) vs hard (DELETE),
+  purge-user via RPC, persistenza della sessione (stub di `AdminClient._request`)
 
 ```bash
 ./run-tests        # oppure: make test, oppure: python -m unittest discover -s tests

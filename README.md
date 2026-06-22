@@ -111,7 +111,10 @@ obbligatoria**) e schermata bilancio con saldi e pagamenti suggeriti. Ogni spesa
 mostra **data e ora**; toccandola si può **modificare la descrizione** o
 **cancellarla**. Dalla pagina del viaggio si può **Sincronizzare** e
 **Condividere** il codice. Nella lista, i viaggi condivisi mostrano una riga
-**"Condiviso con: …"** con le email degli altri membri. Il database è in `~/.config/diviconto/diviconto.db`
+**"Condiviso con: …"** con le email degli altri membri. Dal menu **⋮** (in alto
+nel dettaglio): il creatore può **eliminare il viaggio** o **gestire la
+condivisione** (rimuovere un membro, oppure revocare a tutti rigenerando il
+codice); un partecipante può **abbandonare** il viaggio. Il database è in `~/.config/diviconto/diviconto.db`
 (cartella dati dell'app, valida anche su Android); la variabile `DIVICONTO_DB`
 lo sovrascrive (utile per provare più "dispositivi" sullo stesso PC).
 
@@ -172,6 +175,15 @@ usano i CA di sistema).
   viaggi si sincronizzano anche automaticamente all'apertura.
 - Nella lista, un viaggio condiviso mostra **"Condiviso con: …"** con le email
   degli altri membri.
+- **Cancellare / uscire / rimuovere** (menu **⋮** nel dettaglio del viaggio):
+  il **creatore** può **eliminare** il viaggio (sparisce per tutti) o **gestire
+  la condivisione** — rimuovere un singolo membro o **revocare a tutti** (rigenera
+  il codice). Un **partecipante** può **abbandonare** il viaggio (sparisce solo
+  dal suo dispositivo). Da CLI: `divc trip delete|leave|kick|revoke`.
+
+  > Limite del modello offline-first: rimuovere/escludere un membro gli **revoca
+  > gli accessi futuri**, ma la copia **già scaricata** gli resta sul telefono —
+  > da remoto non possiamo cancellargliela.
 
 ### Usare l'app senza account (offline)
 All'avvio si può toccare **"Continua senza account (solo su questo telefono)"**:
@@ -194,8 +206,8 @@ l'unica cosa che andrebbe persa nel passaggio).
 3. **SQL Editor → New query**: incolla ed esegui [supabase/schema.sql](supabase/schema.sql)
    (crea tabelle, Row Level Security, trigger e la funzione `join_trip`). È
    **idempotente**: rieseguendolo dopo un aggiornamento applica le modifiche (es.
-   la colonna `email` in `trip_members`, con backfill, per mostrare con chi è
-   condiviso un viaggio).
+   la colonna `email` in `trip_members` per mostrare con chi è condiviso un
+   viaggio, oppure la tabella `admins` + RPC per i comandi `divc admin`).
 4. **Project Settings → API**: copia **Project URL** e chiave **anon public** e
    mettile in [diviconto/sync_config.py](diviconto/sync_config.py) (oppure nelle
    variabili d'ambiente `SUPABASE_URL` / `SUPABASE_ANON_KEY`).
@@ -211,18 +223,48 @@ DIVICONTO_DB=/tmp/b.db python main.py   # dispositivo B: accedi, Unisciti col co
 ```
 
 ### Manutenzione del DB server (amministrazione)
-Lo script [tools/supabase_admin.py](tools/supabase_admin.py) (solo stdlib) serve a
-ispezionare e ripulire il backend — utile per rimuovere le righe-spazzatura
-lasciate dagli utenti usa-e-getta dei test. Usa la chiave **service_role** (che
-bypassa la RLS), letta **solo** da variabile d'ambiente:
+I comandi `admin` della CLI (in [diviconto/admin.py](diviconto/admin.py), solo
+stdlib) ispezionano e ripuliscono il backend. Per usarli ci si autentica come
+**utente admin**: un normale account Auth il cui id è nella tabella `admins`.
+Non serve la `service_role` — basta un account elevato, più sicuro da usare
+anche da telefono (Termux).
+
+**Una tantum — rendere admin un account** (lo fa chi gestisce il progetto):
+
+1. **Crea l'account** dalla dashboard: *Authentication → Add user* (email +
+   password, spunta *Auto Confirm User*). In alternativa, registrati dall'app con
+   quell'email. Non si crea con una query SQL (serve l'hashing della password).
+2. **Promuovilo** con una query nel **SQL Editor** (trova da sé lo *user id*
+   dall'email):
+   ```sql
+   insert into public.admins (user_id)
+   select id from auth.users where email = 'admin@tuodominio.it'
+   on conflict do nothing;
+   ```
+   Verificare chi è admin, oppure revocarne uno:
+   ```sql
+   select u.email from public.admins a join auth.users u on u.id = a.user_id;
+
+   delete from public.admins
+   where user_id = (select id from auth.users where email = 'admin@tuodominio.it');
+   ```
+
+> Usa un account **dedicato** all'amministrazione: per via della RLS estesa, un
+> admin vede tutti i dati **anche nell'app normale**. Tienilo separato dal tuo
+> account personale.
+
+**Uso:**
 ```bash
-export SUPABASE_SERVICE_KEY='...'        # Project Settings → API → service_role 'secret'
-python tools/supabase_admin.py users     # elenca gli utenti Auth
-python tools/supabase_admin.py trips     # elenca i viaggi (owner + conteggi)
-python tools/supabase_admin.py purge-trip <id> --yes     # cancella un viaggio
-python tools/supabase_admin.py purge-user <email> --yes  # cancella utente + suoi viaggi
+./divc admin login                       # email+password (input nascosto); salva la sessione
+./divc admin users                       # elenca gli utenti Auth
+./divc admin trips                       # elenca i viaggi (owner + conteggi)
+./divc admin purge-trip <id> --yes       # cancella un viaggio
+./divc admin purge-user <email> --yes    # soft (marca i viaggi); con --hard rimuove anche l'utente
+./divc admin logout                      # rimuove la sessione
 ```
-I comandi `purge-*` fanno un **dry-run** finché non aggiungi `--yes`.
+I comandi `purge-*` fanno un **dry-run** finché non aggiungi `--yes`. La sessione
+admin è salvata in `~/.config/diviconto/admin_session.json` (permessi 0600); gli
+altri comandi (`trip`, `expense`, …) sono locali e non richiedono il login.
 
 > **Soft-delete vs hard-delete.** Di default `purge-*` fa un **soft-delete**
 > (`deleted=true`): è l'unico modo che **si propaga ai dispositivi** via sync
@@ -230,7 +272,6 @@ I comandi `purge-*` fanno un **dry-run** finché non aggiungi `--yes`.
 > fisicamente la riga: NON si propaga (un dispositivo offline-first non "vede" una
 > riga sparita e può perfino ricrearla col push successivo se la sua copia è
 > `dirty`), quindi va usata **solo** per la spazzatura di account usa-e-getta.
-> Non mettere mai la `service_role` né la password del DB nell'app o su git.
 
 ## Installazione CLI (opzionale)
 
@@ -274,9 +315,9 @@ python -m unittest discover -s tests   # comando diretto (anche su Termux)
 - `diviconto/cli.py` — interfaccia a riga di comando
 - `diviconto/sync.py` — sincronizzazione con Supabase (push/pull, auth)
 - `diviconto/sync_config.py` — URL e chiave anon del progetto Supabase
+- `diviconto/admin.py` — comandi `divc admin` (manutenzione cloud; login utente admin)
 - `supabase/schema.sql` — schema, RLS e funzioni lato server (da eseguire una volta)
 - `ui/` — interfaccia grafica Kivy/KivyMD (solo presentazione; richiama `core`)
-- `tools/supabase_admin.py` — manutenzione del DB server (service_role; vedi sopra)
 - `main.py` — entry point della UI; `buildozer.spec` — build Android
 
 Dettagli tecnici in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md).

@@ -56,6 +56,12 @@ class FakeSupabase:
             return self._token(q, body)
         if path == "/rest/v1/rpc/join_trip":
             return self._join(body)
+        if path == "/rest/v1/rpc/leave_trip":
+            return self._leave(body)
+        if path == "/rest/v1/rpc/remove_member":
+            return self._remove_member(body)
+        if path == "/rest/v1/rpc/revoke_sharing":
+            return self._revoke(body)
         if path == "/rest/v1/trip_members":
             return self._select_members()
         if path.startswith("/rest/v1/"):
@@ -73,6 +79,38 @@ class FakeSupabase:
             for email, role in members.items()
         ]
         return self._json(200, rows)
+
+    # --- gestione condivisione/appartenenza ---
+    def _is_owner(self, tid, email):
+        trip = self.tables["trips"].get(tid)
+        return bool(trip and email and trip.get("owner_id") == self._email_for_id(email))
+
+    def _email_for_id(self, email):
+        u = self.users.get(email)
+        return u["id"] if u else None
+
+    def _leave(self, body):
+        tid, email = body["tid"], self._current_email
+        if self._is_owner(tid, email):
+            return self._json(400, {"message": "owner non può abbandonare"})
+        self.members.get(tid, {}).pop(email, None)
+        return (204, b"")
+
+    def _remove_member(self, body):
+        tid, email = body["tid"], self._current_email
+        if not self._is_owner(tid, email):
+            return self._json(400, {"message": "solo il proprietario"})
+        self.members.get(tid, {}).pop(body["member_email"], None)
+        return (204, b"")
+
+    def _revoke(self, body):
+        tid, email = body["tid"], self._current_email
+        if not self._is_owner(tid, email):
+            return self._json(400, {"message": "solo il proprietario"})
+        self.members[tid] = {email: "owner"}
+        newcode = uuid.uuid4().hex[:8].upper()
+        self.tables["trips"][tid]["share_code"] = newcode
+        return self._json(200, newcode)
 
     # --- auth ---
     def _signup(self, body):
@@ -296,6 +334,61 @@ class SyncTwoClientsTest(unittest.TestCase):
         # Entrambi vedono i due membri nella cache locale.
         self.assertEqual(self.a.db.members_by_trip().get(trip.id), ["a@x.it", "b@x.it"])
         self.assertEqual(self.b.db.members_by_trip().get(trip.id), ["a@x.it", "b@x.it"])
+
+    def test_delete_trip_propagates(self):
+        trip = seed_trip(self.a)
+        self.a.sync()
+        code = self.a.share_code(trip.id)
+        self.b.join_trip(code)
+        self.assertIn("Roma", [t.name for t in self.b.db.list_trips()])
+        # L'owner cancella il viaggio (soft-delete) -> sparisce per tutti.
+        core.delete_trip(self.a.db, trip.id)
+        self.a.sync()
+        self.b.sync()
+        self.assertEqual(self.b.db.list_trips(), [])
+
+    def test_leave_trip_removes_local_and_membership(self):
+        trip = seed_trip(self.a)
+        self.a.sync()
+        self.b.join_trip(self.a.share_code(trip.id))
+        self.assertIn("Roma", [t.name for t in self.b.db.list_trips()])
+        self.b.leave_trip(trip.id)
+        self.assertEqual(self.b.db.list_trips(), [])           # copia locale rimossa
+        self.assertIn("Roma", [t.name for t in self.a.db.list_trips()])  # resta per A
+        self.a._pull_members()
+        self.assertNotIn("b@x.it", self.a.db.members_by_trip().get(trip.id, []))
+
+    def test_owner_cannot_leave(self):
+        trip = seed_trip(self.a)
+        self.a.sync()
+        with self.assertRaises(SyncError):
+            self.a.leave_trip(trip.id)
+
+    def test_owner_removes_member(self):
+        trip = seed_trip(self.a)
+        self.a.sync()
+        self.b.join_trip(self.a.share_code(trip.id))
+        self.a._pull_members()
+        self.assertIn("b@x.it", self.a.db.members_by_trip().get(trip.id, []))
+        self.a.remove_member(trip.id, "b@x.it")
+        self.assertNotIn("b@x.it", self.a.db.members_by_trip().get(trip.id, []))
+
+    def test_member_cannot_remove(self):
+        trip = seed_trip(self.a)
+        self.a.sync()
+        self.b.join_trip(self.a.share_code(trip.id))
+        with self.assertRaises(SyncError):
+            self.b.remove_member(trip.id, "a@x.it")
+
+    def test_revoke_sharing_kicks_all_and_rotates_code(self):
+        trip = seed_trip(self.a)
+        self.a.sync()
+        code = self.a.share_code(trip.id)
+        self.b.join_trip(code)
+        newcode = self.a.revoke_sharing(trip.id)
+        self.assertTrue(newcode and newcode != code)
+        self.assertNotIn("b@x.it", self.a.db.members_by_trip().get(trip.id, []))
+        self.assertEqual(self.a.share_code(trip.id), newcode)
 
     @staticmethod
     def _rename(db, trip_id, name):

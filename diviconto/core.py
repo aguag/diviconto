@@ -196,6 +196,13 @@ def delete_expense(db: Database, expense_id: str) -> None:
     db.delete_expense(expense_id)
 
 
+def delete_trip(db: Database, trip_ref: str) -> Trip:
+    """Cancella (soft-delete) un intero viaggio. Ritorna il viaggio cancellato."""
+    trip = resolve_trip(db, trip_ref)
+    db.delete_trip(trip.id)
+    return trip
+
+
 # ---- Balance -------------------------------------------------------------
 def compute_balance(db: Database, trip_ref: str) -> Balance:
     trip = resolve_trip(db, trip_ref)

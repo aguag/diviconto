@@ -120,7 +120,8 @@
             left_action_items: [["arrow-left", lambda x: root.go_back()]]
             right_action_items:
                 [["sync", lambda x: root.do_sync(), "Sincronizza"], \
-                ["share-variant", lambda x: root.show_share_code(), "Condividi"]]
+                ["share-variant", lambda x: root.show_share_code(), "Condividi"], \
+                ["dots-vertical", lambda x: root.open_trip_menu(), "Gestisci viaggio"]]
         MDBottomNavigation:
             id: bottom_nav
 
