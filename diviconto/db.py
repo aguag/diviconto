@@ -308,6 +308,10 @@ class Database:
             for r in rows
         ]
 
+    def list_splits(self, expense_id: str) -> list[Split]:
+        """Quote (split) non cancellate di una spesa, una per partecipante."""
+        return self._splits_for(expense_id)
+
     # ---- Sincronizzazione -------------------------------------------------
     def dirty_rows(self, table: str) -> list[dict]:
         """Righe locali da inviare al server (dirty=1), come dizionari."""

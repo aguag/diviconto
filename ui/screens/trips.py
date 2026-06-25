@@ -10,6 +10,7 @@ from kivymd.uix.list import ThreeLineListItem, TwoLineListItem
 from kivymd.uix.screen import MDScreen
 
 from diviconto import core
+from diviconto.i18n import tr
 from ui.widgets import FormTextField, toast
 
 
@@ -29,13 +30,14 @@ class TripsScreen(MDScreen):
         trips = app.db.list_trips()
         if not trips:
             container.add_widget(
-                TwoLineListItem(text="Nessun viaggio", secondary_text="Tocca + per crearne uno")
+                TwoLineListItem(text=tr("Nessun viaggio"),
+                                secondary_text=tr("Tocca + per crearne uno"))
             )
             return
         members = app.db.members_by_trip()
         me = app.sync.current_user()
         for trip in trips:
-            secondary = trip.description or "(nessuna descrizione)"
+            secondary = trip.description or tr("(nessuna descrizione)")
             title = f"{trip.name}  [{trip.base_currency}]"
             # Mostra con chi è condiviso: gli altri membri (esclude te stesso).
             others = [e for e in members.get(trip.id, []) if e and e != me]
@@ -43,7 +45,7 @@ class TripsScreen(MDScreen):
                 item = ThreeLineListItem(
                     text=title,
                     secondary_text=secondary,
-                    tertiary_text="Condiviso con: " + ", ".join(others),
+                    tertiary_text=tr("Condiviso con: ") + ", ".join(others),
                 )
             else:
                 item = TwoLineListItem(text=title, secondary_text=secondary)
@@ -55,11 +57,14 @@ class TripsScreen(MDScreen):
         app.current_trip = trip
         self.manager.current = "trip_detail"
 
+    def open_settings(self):
+        self.manager.current = "settings"
+
     # ---- dialog nuovo viaggio --------------------------------------------
     def open_new_trip_dialog(self):
-        self._name = FormTextField(hint_text="Nome del viaggio")
-        self._currency = FormTextField(hint_text="Valuta base (es. EUR)", text="EUR")
-        self._desc = FormTextField(hint_text="Descrizione (opzionale)")
+        self._name = FormTextField(hint_text=tr("Nome del viaggio"))
+        self._currency = FormTextField(hint_text=tr("Valuta base (es. EUR)"), text="EUR")
+        self._desc = FormTextField(hint_text=tr("Descrizione (opzionale)"))
         content = MDBoxLayout(
             orientation="vertical",
             spacing="12dp",
@@ -71,12 +76,12 @@ class TripsScreen(MDScreen):
         content.add_widget(self._desc)
 
         self._dialog = MDDialog(
-            title="Nuovo viaggio",
+            title=tr("Nuovo viaggio"),
             type="custom",
             content_cls=content,
             buttons=[
-                MDFlatButton(text="Annulla", on_release=lambda *_: self._dialog.dismiss()),
-                MDRaisedButton(text="Crea", on_release=lambda *_: self._create_trip()),
+                MDFlatButton(text=tr("Annulla"), on_release=lambda *_: self._dialog.dismiss()),
+                MDRaisedButton(text=tr("Crea"), on_release=lambda *_: self._create_trip()),
             ],
         )
         self._dialog.open()
@@ -100,25 +105,25 @@ class TripsScreen(MDScreen):
     def do_sync(self):
         app = MDApp.get_running_app()
         if not app.sync.is_logged_in():
-            toast("Accedi per sincronizzare")
+            toast(tr("Accedi per sincronizzare"))
             self.manager.current = "auth"
             return
-        toast("Sincronizzazione…")
+        toast(tr("Sincronizzazione…"))
 
         def done(_):
             self.refresh()
-            toast("Sincronizzato")
+            toast(tr("Sincronizzato"))
 
         app.run_async(app.sync.sync, done, lambda exc: toast(str(exc)))
 
     # ---- Account (connesso / offline) ------------------------------------
     def _update_account_bar(self, app):
         if app.sync.is_logged_in():
-            self.ids.account_label.text = f"Connesso: {app.sync.current_user()}"
-            self.ids.account_btn.text = "Esci"
+            self.ids.account_label.text = tr("Connesso: {user}").format(user=app.sync.current_user())
+            self.ids.account_btn.text = tr("Esci")
         else:
-            self.ids.account_label.text = "Modalità offline (non connesso)"
-            self.ids.account_btn.text = "Accedi"
+            self.ids.account_label.text = tr("Modalità offline (non connesso)")
+            self.ids.account_btn.text = tr("Accedi")
 
     def account_action(self):
         """Esce se connesso, altrimenti porta alla schermata di accesso."""
@@ -131,24 +136,24 @@ class TripsScreen(MDScreen):
     def do_logout(self):
         app = MDApp.get_running_app()
         app.sync.logout()
-        toast("Disconnesso")
+        toast(tr("Disconnesso"))
         self.refresh()  # resta sui viaggi in modalità offline
 
     # ---- Unisciti a un viaggio con codice --------------------------------
     def open_join_dialog(self):
         app = MDApp.get_running_app()
         if not app.sync.is_logged_in():
-            toast("Accedi per unirti a un viaggio")
+            toast(tr("Accedi per unirti a un viaggio"))
             self.manager.current = "auth"
             return
-        self._code = FormTextField(hint_text="Codice del viaggio")
+        self._code = FormTextField(hint_text=tr("Codice del viaggio"))
         self._dialog = MDDialog(
-            title="Unisciti a un viaggio",
+            title=tr("Unisciti a un viaggio"),
             type="custom",
             content_cls=self._code,
             buttons=[
-                MDFlatButton(text="Annulla", on_release=lambda *_: self._dialog.dismiss()),
-                MDRaisedButton(text="Unisciti", on_release=lambda *_: self._join()),
+                MDFlatButton(text=tr("Annulla"), on_release=lambda *_: self._dialog.dismiss()),
+                MDRaisedButton(text=tr("Unisciti"), on_release=lambda *_: self._join()),
             ],
         )
         self._dialog.open()
@@ -157,13 +162,13 @@ class TripsScreen(MDScreen):
         app = MDApp.get_running_app()
         code = self._code.text.strip()
         if not code:
-            toast("Inserisci un codice")
+            toast(tr("Inserisci un codice"))
             return
         self._dialog.dismiss()
-        toast("Mi unisco…")
+        toast(tr("Mi unisco…"))
 
         def done(_):
             self.refresh()
-            toast("Unito al viaggio")
+            toast(tr("Unito al viaggio"))
 
         app.run_async(lambda: app.sync.join_trip(code), done, lambda exc: toast(str(exc)))

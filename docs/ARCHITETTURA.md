@@ -44,6 +44,7 @@ business è indipendente sia dall'interfaccia (CLI e UI Kivy) sia dallo storage
 | [sync.py](../diviconto/sync.py) | Sincronizzazione con Supabase (auth + push/pull) | HTTP con `urllib` (stdlib); `certifi` solo per i CA su Android |
 | [sync_config.py](../diviconto/sync_config.py) | URL + chiave anon del progetto Supabase | Valori pubblici, override da env |
 | [admin.py](../diviconto/admin.py) | Manutenzione cloud (`divc admin`: login/elenco/purge) | Solo stdlib; login come **utente admin** (anon + sessione salvata), non service_role; dry-run di default |
+| [i18n.py](../diviconto/i18n.py) | Localizzazione IT/EN: `tr()` + dizionario | Stringhe italiane = chiave; lingua da sistema/override, `en` di riserva |
 
 ## Modello dati
 
@@ -200,6 +201,19 @@ Due accorgimenti in `ui/` per la scrittura nei form su Android:
   se il campo è già a fuoco fa un breve `focus = False` così il tocco (gestito da
   super) lo rifocalizza e riapre la tastiera.
 
+## Localizzazione (IT / EN)
+
+`diviconto/i18n.py` fornisce `tr(testo)` con un dizionario IT→EN: la **stringa
+italiana è la chiave**, quindi basta avvolgere i testi in `tr("…")` (in italiano
+è l'identità; se manca la traduzione resta l'italiano — degrada con grazia). I
+testi con valori variabili usano `tr("… {x} …").format(x=…)`. Nei `.kv` si usa
+`app.tr("…")`. La lingua si risolve all'avvio (`resolve_language`): override
+esplicito (`--lang` CLI) → env `DIVICONTO_LANG` → impostazione salvata (app, in
+`sync_state`) → lingua del dispositivo (Android via `pyjnius`, desktop via
+`locale`) → **inglese** di riserva. Cambiarla dall'app (schermata Impostazioni)
+salva la scelta e **ricostruisce le schermate** (`DiviContoApp.change_language`),
+così i `.kv` si rileggono nella nuova lingua senza binding reattivi.
+
 ## Estensioni previste
 
 - **Nuovi criteri di divisione** (`%`, quote): aggiungere un `mode` e la logica
@@ -218,6 +232,8 @@ Due accorgimenti in `ui/` per la scrittura nei form su Android:
   `SyncClient._http`, più client con DB distinti)
 - `test_admin.py` — comandi `admin`: dry-run, soft-delete (PATCH) vs hard (DELETE),
   purge-user via RPC, persistenza della sessione (stub di `AdminClient._request`)
+- `test_i18n.py` — `tr()` (identità IT, traduzione EN, fallback), priorità di
+  `resolve_language` (override/env/saved)
 
 ```bash
 ./run-tests        # oppure: make test, oppure: python -m unittest discover -s tests

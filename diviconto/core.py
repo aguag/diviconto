@@ -12,6 +12,7 @@ from typing import Optional
 
 from . import balance as balance_mod
 from .db import Database, new_id
+from .i18n import tr
 from .models import Balance, Expense, Participant, Split, Trip
 from .money import convert, to_money, to_rate
 
@@ -39,16 +40,16 @@ class SplitSpec:
 # ---- Trip ----------------------------------------------------------------
 def create_trip(db: Database, name: str, currency: str, description: str = "") -> Trip:
     if not name.strip():
-        raise ValueError("il nome del viaggio non può essere vuoto")
+        raise ValueError(tr("il nome del viaggio non può essere vuoto"))
     if not currency.strip():
-        raise ValueError("la valuta base è obbligatoria")
+        raise ValueError(tr("la valuta base è obbligatoria"))
     return db.add_trip(name.strip(), currency.strip().upper(), description.strip())
 
 
 def resolve_trip(db: Database, ref: str) -> Trip:
     trip = db.get_trip(ref)
     if trip is None:
-        raise NotFoundError(f"viaggio non trovato: {ref!r}")
+        raise NotFoundError(tr("viaggio non trovato: {ref}").format(ref=repr(ref)))
     return trip
 
 
@@ -57,16 +58,16 @@ def add_participant(db: Database, trip_ref: str, name: str) -> Participant:
     trip = resolve_trip(db, trip_ref)
     name = name.strip()
     if not name:
-        raise ValueError("il nome del partecipante non può essere vuoto")
+        raise ValueError(tr("il nome del partecipante non può essere vuoto"))
     if db.get_participant_by_name(trip.id, name):
-        raise ValueError(f"partecipante {name!r} già presente nel viaggio")
+        raise ValueError(tr("partecipante {name} già presente nel viaggio").format(name=repr(name)))
     return db.add_participant(trip.id, name)
 
 
 def _participant_or_error(db: Database, trip: Trip, name: str) -> Participant:
     p = db.get_participant_by_name(trip.id, name)
     if p is None:
-        raise NotFoundError(f"partecipante non trovato nel viaggio: {name!r}")
+        raise NotFoundError(tr("partecipante non trovato nel viaggio: {name}").format(name=repr(name)))
     return p
 
 
@@ -90,15 +91,15 @@ def add_expense(
     trip = resolve_trip(db, trip_ref)
     participants = db.list_participants(trip.id)
     if not participants:
-        raise ValueError("aggiungi almeno un partecipante prima di registrare spese")
+        raise ValueError(tr("aggiungi almeno un partecipante prima di registrare spese"))
 
     if not description.strip():
-        raise ValueError("la descrizione della spesa è obbligatoria")
+        raise ValueError(tr("la descrizione della spesa è obbligatoria"))
 
     payer = _participant_or_error(db, trip, payer_name)
     amount = to_money(amount)
     if amount <= 0:
-        raise ValueError("l'importo della spesa deve essere positivo")
+        raise ValueError(tr("l'importo della spesa deve essere positivo"))
 
     currency = (currency or trip.base_currency).strip().upper()
     if currency == trip.base_currency:
@@ -106,8 +107,9 @@ def add_expense(
     else:
         if rate is None:
             raise ValueError(
-                f"valuta {currency} diversa dalla base {trip.base_currency}: "
-                "serve --rate (tasso verso la valuta base)"
+                tr("valuta {cur} diversa dalla base {base}: "
+                   "serve --rate (tasso verso la valuta base)").format(
+                    cur=currency, base=trip.base_currency)
             )
         rate_dec = to_rate(rate)
     amount_base = convert(amount, rate_dec)
@@ -150,14 +152,15 @@ def _build_splits(
 
     if split.mode == "exact":
         if not split.amounts:
-            raise ValueError("divisione 'exact' senza importi")
+            raise ValueError(tr("divisione 'exact' senza importi"))
         chosen = [_participant_or_error(db, trip, n) for n in split.amounts]
         shares_orig = [to_money(split.amounts[p.name]) for p in chosen]
         total = sum(shares_orig, Decimal("0.00"))
         if total != expense.amount:
             raise ValueError(
-                f"la somma delle quote ({total}) non corrisponde all'importo "
-                f"della spesa ({expense.amount} {expense.currency})"
+                tr("la somma delle quote ({total}) non corrisponde all'importo "
+                   "della spesa ({amount} {currency})").format(
+                    total=total, amount=expense.amount, currency=expense.currency)
             )
         # converte ogni quota in valuta base; l'ultima assorbe l'arrotondamento
         shares_base = [convert(s, rate_dec) for s in shares_orig]
@@ -169,13 +172,13 @@ def _build_splits(
             for p, share in zip(chosen, shares_base)
         ]
 
-    raise ValueError(f"modalità di divisione sconosciuta: {split.mode!r}")
+    raise ValueError(tr("modalità di divisione sconosciuta: {mode}").format(mode=repr(split.mode)))
 
 
 def _split_equally(total: Decimal, n: int) -> list[Decimal]:
     """Divide ``total`` in ``n`` quote che sommano esattamente a ``total``."""
     if n <= 0:
-        raise ValueError("nessun partecipante selezionato per la divisione")
+        raise ValueError(tr("nessun partecipante selezionato per la divisione"))
     base = to_money(total / n)
     shares = [base] * n
     drift = to_money(total - base * n)
@@ -187,7 +190,7 @@ def update_expense_description(db: Database, expense_id: str, description: str) 
     """Modifica la descrizione di una spesa (obbligatoria, non vuota)."""
     description = description.strip()
     if not description:
-        raise ValueError("la descrizione della spesa è obbligatoria")
+        raise ValueError(tr("la descrizione della spesa è obbligatoria"))
     db.update_expense_description(expense_id, description)
 
 

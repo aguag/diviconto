@@ -98,6 +98,15 @@ Oltre alla CLI c'è una UI grafica (**Kivy + KivyMD**) che riusa lo stesso core
 e gira su **Linux** e su **Android** (APK). Le dipendenze UI sono separate dalla
 CLI (la CLI resta a sola libreria standard).
 
+### Lingua (Italiano / English)
+L'app parte nella **lingua del dispositivo** (italiano o inglese; **inglese** per
+ogni altra lingua) e ricorda la scelta. Puoi cambiarla dall'icona ⚙️ in alto nella
+lista viaggi → **Impostazioni → Lingua**: l'app si ricostruisce subito nella nuova
+lingua e la mantiene ai riavvii successivi. La CLI usa la stessa logica: lingua
+del sistema, sovrascrivibile con `--lang it|en` o l'env `DIVICONTO_LANG`. La
+localizzazione è un dizionario senza dipendenze (vedi `diviconto/i18n.py`); i dati
+inseriti (nomi, descrizioni) non vengono tradotti.
+
 ### Avvio su Linux
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -108,8 +117,10 @@ python main.py
 La UI offre: elenco/creazione viaggi, gestione partecipanti, inserimento spese
 (parti uguali o importi esatti, multi-valuta con tasso; **descrizione
 obbligatoria**) e schermata bilancio con saldi e pagamenti suggeriti. Ogni spesa
-mostra **data e ora**; toccandola si può **modificare la descrizione** o
-**cancellarla**. Dalla pagina del viaggio si può **Sincronizzare** e
+mostra **data e ora**; toccandola si apre un riepilogo (pagante, tipo di
+divisione e **quota di ciascun partecipante**) da cui si può **modificare la
+descrizione** o **cancellarla**. Per gli **importi esatti** la somma delle quote
+deve coincidere con l'importo (validato al salvataggio). Dalla pagina del viaggio si può **Sincronizzare** e
 **Condividere** il codice. Nella lista, i viaggi condivisi mostrano una riga
 **"Condiviso con: …"** con le email degli altri membri. Dal menu **⋮** (in alto
 nel dettaglio): il creatore può **eliminare il viaggio** o **gestire la
@@ -316,6 +327,7 @@ python -m unittest discover -s tests   # comando diretto (anche su Termux)
 - `diviconto/sync.py` — sincronizzazione con Supabase (push/pull, auth)
 - `diviconto/sync_config.py` — URL e chiave anon del progetto Supabase
 - `diviconto/admin.py` — comandi `divc admin` (manutenzione cloud; login utente admin)
+- `diviconto/i18n.py` — localizzazione Italiano/Inglese (`tr`), senza dipendenze
 - `supabase/schema.sql` — schema, RLS e funzioni lato server (da eseguire una volta)
 - `ui/` — interfaccia grafica Kivy/KivyMD (solo presentazione; richiama `core`)
 - `main.py` — entry point della UI; `buildozer.spec` — build Android

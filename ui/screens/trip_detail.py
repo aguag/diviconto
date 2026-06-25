@@ -13,6 +13,7 @@ from kivymd.uix.list import OneLineListItem, TwoLineListItem
 from kivymd.uix.screen import MDScreen
 
 from diviconto import core
+from diviconto.i18n import tr
 from diviconto.money import format_money
 from ui.widgets import FormTextField, toast
 
@@ -56,13 +57,13 @@ class TripDetailScreen(MDScreen):
     def do_sync(self):
         app = MDApp.get_running_app()
         if not app.sync.is_logged_in():
-            toast("Accedi per sincronizzare")
+            toast(tr("Accedi per sincronizzare"))
             return
-        toast("Sincronizzazione…")
+        toast(tr("Sincronizzazione…"))
 
         def done(_):
             self.refresh_all()
-            toast("Sincronizzato")
+            toast(tr("Sincronizzato"))
 
         app.run_async(app.sync.sync, done, lambda exc: toast(str(exc)))
 
@@ -70,26 +71,26 @@ class TripDetailScreen(MDScreen):
     def show_share_code(self):
         app = MDApp.get_running_app()
         if not app.sync.is_logged_in():
-            toast("Accedi per condividere il viaggio")
+            toast(tr("Accedi per condividere il viaggio"))
             return
         trip_id = app.current_trip.id
-        toast("Recupero codice…")
+        toast(tr("Recupero codice…"))
 
         def done(code):
             if not code:
-                toast("Sincronizza prima per generare il codice")
+                toast(tr("Sincronizza prima per generare il codice"))
                 return
             self._dialog = MDDialog(
                 # auto_dismiss=False: si chiude solo coi pulsanti. Senza questo,
                 # il rilascio del tocco che ha aperto il dialog cade fuori da esso
                 # e lo chiuderebbe subito (il sync è veloce e apre a metà tocco).
                 auto_dismiss=False,
-                title="Codice del viaggio",
-                text=f"Condividi questo codice:\n\n[b]{code}[/b]\n\n"
-                     "Gli amici lo inseriscono in \"Unisciti a un viaggio\".",
+                title=tr("Codice del viaggio"),
+                text=tr("Condividi questo codice:\n\n[b]{code}[/b]\n\n"
+                        "Gli amici lo inseriscono in \"Unisciti a un viaggio\".").format(code=code),
                 buttons=[
-                    MDFlatButton(text="Copia", on_release=lambda *_: self._copy_code(code)),
-                    MDFlatButton(text="Chiudi", on_release=lambda *_: self._dialog.dismiss()),
+                    MDFlatButton(text=tr("Copia"), on_release=lambda *_: self._copy_code(code)),
+                    MDFlatButton(text=tr("Chiudi"), on_release=lambda *_: self._dialog.dismiss()),
                 ],
             )
             self._dialog.open()
@@ -104,7 +105,7 @@ class TripDetailScreen(MDScreen):
     def _copy_code(self, code: str):
         from kivy.core.clipboard import Clipboard
         Clipboard.copy(code)
-        toast("Codice copiato")
+        toast(tr("Codice copiato"))
 
     # ---- Gestione viaggio / condivisione ---------------------------------
     def _my_role(self):
@@ -135,29 +136,29 @@ class TripDetailScreen(MDScreen):
             rows.height += 56
 
         if role == "owner":
-            add_btn("Elimina viaggio", self._confirm_delete_trip)
+            add_btn(tr("Elimina viaggio"), self._confirm_delete_trip)
             if others:
-                add_btn("Gestisci condivisione", self._open_share_management)
+                add_btn(tr("Gestisci condivisione"), self._open_share_management)
         else:
-            add_btn("Abbandona viaggio", self._confirm_leave_trip)
+            add_btn(tr("Abbandona viaggio"), self._confirm_leave_trip)
 
         self._dialog = MDDialog(
-            auto_dismiss=False, title="Viaggio", type="custom", content_cls=rows,
-            buttons=[MDFlatButton(text="Chiudi", on_release=lambda *_: self._dialog.dismiss())],
+            auto_dismiss=False, title=tr("Viaggio"), type="custom", content_cls=rows,
+            buttons=[MDFlatButton(text=tr("Chiudi"), on_release=lambda *_: self._dialog.dismiss())],
         )
         self._dialog.open()
 
     def _confirm_delete_trip(self):
         self._dialog.dismiss()
-        self._confirm("Eliminare il viaggio?",
-                      "Sparirà per tutti i partecipanti alla prossima sincronizzazione.",
+        self._confirm(tr("Eliminare il viaggio?"),
+                      tr("Sparirà per tutti i partecipanti alla prossima sincronizzazione."),
                       self._do_delete_trip)
 
     def _do_delete_trip(self):
         app = MDApp.get_running_app()
         trip = app.current_trip
         core.delete_trip(app.db, trip.id)
-        toast("Viaggio eliminato")
+        toast(tr("Viaggio eliminato"))
         self.manager.current = "trips"
         self.manager.get_screen("trips").refresh()
         if app.sync.is_logged_in():  # propaga subito, se possibile
@@ -167,10 +168,10 @@ class TripDetailScreen(MDScreen):
         self._dialog.dismiss()
         app = MDApp.get_running_app()
         if not app.sync.is_logged_in():
-            toast("Accedi per abbandonare il viaggio")
+            toast(tr("Accedi per abbandonare il viaggio"))
             return
-        self._confirm("Abbandonare il viaggio?",
-                      "Verrà rimosso da questo dispositivo; resta per gli altri.",
+        self._confirm(tr("Abbandonare il viaggio?"),
+                      tr("Verrà rimosso da questo dispositivo; resta per gli altri."),
                       self._do_leave_trip)
 
     def _do_leave_trip(self):
@@ -178,11 +179,11 @@ class TripDetailScreen(MDScreen):
         trip_id = app.current_trip.id
 
         def done(_):
-            toast("Hai abbandonato il viaggio")
+            toast(tr("Hai abbandonato il viaggio"))
             self.manager.current = "trips"
             self.manager.get_screen("trips").refresh()
 
-        toast("Esco dal viaggio…")
+        toast(tr("Esco dal viaggio…"))
         app.run_async(lambda: app.sync.leave_trip(trip_id), done, lambda exc: toast(str(exc)))
 
     def _open_share_management(self):
@@ -195,18 +196,18 @@ class TripDetailScreen(MDScreen):
         for email in others:
             row = MDBoxLayout(orientation="horizontal", size_hint_y=None, height="44dp", spacing="8dp")
             row.add_widget(MDLabel(text=email, valign="center", shorten=True))
-            btn = MDFlatButton(text="Rimuovi", theme_text_color="Error")
+            btn = MDFlatButton(text=tr("Rimuovi"), theme_text_color="Error")
             btn.bind(on_release=lambda _w, e=email: self._do_remove_member(e))
             row.add_widget(btn)
             box.add_widget(row)
             box.height += 50
-        revoke = MDRaisedButton(text="Revoca a tutti + nuovo codice", pos_hint={"center_x": .5})
+        revoke = MDRaisedButton(text=tr("Revoca a tutti + nuovo codice"), pos_hint={"center_x": .5})
         revoke.bind(on_release=lambda *_: self._confirm_revoke())
         box.add_widget(revoke)
         box.height += 56
         self._dialog = MDDialog(
-            auto_dismiss=False, title="Gestisci condivisione", type="custom", content_cls=box,
-            buttons=[MDFlatButton(text="Chiudi", on_release=lambda *_: self._dialog.dismiss())],
+            auto_dismiss=False, title=tr("Gestisci condivisione"), type="custom", content_cls=box,
+            buttons=[MDFlatButton(text=tr("Chiudi"), on_release=lambda *_: self._dialog.dismiss())],
         )
         self._dialog.open()
 
@@ -216,18 +217,18 @@ class TripDetailScreen(MDScreen):
         trip_id = app.current_trip.id
 
         def done(_):
-            toast(f"Rimosso {email}")
+            toast(tr("Rimosso {email}").format(email=email))
             self.refresh_all()
 
-        toast("Rimuovo…")
+        toast(tr("Rimuovo…"))
         app.run_async(lambda: app.sync.remove_member(trip_id, email), done,
                       lambda exc: toast(str(exc)))
 
     def _confirm_revoke(self):
         self._dialog.dismiss()
-        self._confirm("Revocare la condivisione a tutti?",
-                      "Gli altri membri vengono rimossi e il codice rigenerato "
-                      "(il vecchio non funzionerà più).",
+        self._confirm(tr("Revocare la condivisione a tutti?"),
+                      tr("Gli altri membri vengono rimossi e il codice rigenerato "
+                         "(il vecchio non funzionerà più)."),
                       self._do_revoke)
 
     def _do_revoke(self):
@@ -235,10 +236,10 @@ class TripDetailScreen(MDScreen):
         trip_id = app.current_trip.id
 
         def done(newcode):
-            toast(f"Condivisione revocata. Nuovo codice: {newcode}")
+            toast(tr("Condivisione revocata. Nuovo codice: {code}").format(code=newcode))
             self.refresh_all()
 
-        toast("Revoco…")
+        toast(tr("Revoco…"))
         app.run_async(lambda: app.sync.revoke_sharing(trip_id), done,
                       lambda exc: toast(str(exc)))
 
@@ -246,9 +247,9 @@ class TripDetailScreen(MDScreen):
         self._dialog = MDDialog(
             auto_dismiss=False, title=title, text=text,
             buttons=[
-                MDFlatButton(text="Annulla", on_release=lambda *_: self._dialog.dismiss()),
+                MDFlatButton(text=tr("Annulla"), on_release=lambda *_: self._dialog.dismiss()),
                 MDRaisedButton(
-                    text="Conferma",
+                    text=tr("Conferma"),
                     on_release=lambda *_: (self._dialog.dismiss(), on_yes()),
                 ),
             ],
@@ -264,14 +265,14 @@ class TripDetailScreen(MDScreen):
         people = {p.id: p.name for p in app.db.list_participants(trip.id)}
         expenses = app.db.list_expenses(trip.id)
         if not expenses:
-            lst.add_widget(OneLineListItem(text="Nessuna spesa"))
+            lst.add_widget(OneLineListItem(text=tr("Nessuna spesa")))
             return
         for e in expenses:
             payer = people.get(e.payer_id, "?")
             amount = format_money(e.amount, e.currency)
             if e.currency != trip.base_currency:
                 amount += f" = {format_money(e.amount_base, trip.base_currency)}"
-            desc = e.description or "(senza descrizione)"
+            desc = e.description or tr("(senza descrizione)")
             item = TwoLineListItem(
                 text=f"{payer}: {amount}",
                 secondary_text=f"{desc} · {_format_when(e.created_at)}",
@@ -282,38 +283,62 @@ class TripDetailScreen(MDScreen):
     def open_expense_form(self):
         app = MDApp.get_running_app()
         if not app.db.list_participants(app.current_trip.id):
-            toast("Aggiungi prima un partecipante")
+            toast(tr("Aggiungi prima un partecipante"))
             return
         self.manager.current = "expense_form"
 
     # ---- Azioni su una spesa (modifica descrizione / cancella) ------------
+    def _expense_detail_text(self, exp) -> str:
+        """Testo del popup spesa: pagante, tipo divisione e quote per persona."""
+        app = MDApp.get_running_app()
+        trip = app.current_trip
+        people = {p.id: p.name for p in app.db.list_participants(trip.id)}
+        splits = app.db.list_splits(exp.id)
+        mode = splits[0].mode if splits else "equal"
+        mode_label = tr("Parti uguali") if mode == "equal" else tr("Importi esatti")
+        lines = [
+            exp.description or tr("(senza descrizione)"),
+            "",
+            f"[b]{tr('Pagante')}:[/b] {people.get(exp.payer_id, '?')}",
+            f"[b]{tr('Tipo')}:[/b] {mode_label}",
+            f"[b]{tr('Importo')}:[/b] {format_money(exp.amount, exp.currency)}",
+        ]
+        if exp.currency != trip.base_currency:
+            lines.append(f"          (= {format_money(exp.amount_base, trip.base_currency)})")
+        lines.append("")
+        lines.append(f"[b]{tr('Quote')}[/b] (in {trip.base_currency}):")
+        for s in splits:
+            lines.append(f"  • {people.get(s.participant_id, '?')}: "
+                         f"{format_money(s.share_base, trip.base_currency)}")
+        return "\n".join(lines)
+
     def open_expense_actions(self, exp):
         self._dialog = MDDialog(
             auto_dismiss=False,
-            title="Spesa",
-            text=exp.description or "(senza descrizione)",
+            title=tr("Spesa"),
+            text=self._expense_detail_text(exp),
             buttons=[
-                MDFlatButton(text="Modifica descrizione",
+                MDFlatButton(text=tr("Modifica descrizione"),
                              on_release=lambda *_: self._edit_description(exp)),
-                MDFlatButton(text="Cancella", theme_text_color="Custom",
+                MDFlatButton(text=tr("Elimina Spesa"), theme_text_color="Custom",
                              text_color=(0.8, 0, 0, 1),
                              on_release=lambda *_: self._confirm_delete(exp)),
-                MDFlatButton(text="Chiudi", on_release=lambda *_: self._dialog.dismiss()),
+                MDFlatButton(text=tr("Chiudi"), on_release=lambda *_: self._dialog.dismiss()),
             ],
         )
         self._dialog.open()
 
     def _edit_description(self, exp):
         self._dialog.dismiss()
-        self._edit_field = FormTextField(text=exp.description, hint_text="Descrizione")
+        self._edit_field = FormTextField(text=exp.description, hint_text=tr("Descrizione"))
         self._dialog = MDDialog(
             auto_dismiss=False,
-            title="Modifica descrizione",
+            title=tr("Modifica descrizione"),
             type="custom",
             content_cls=self._edit_field,
             buttons=[
-                MDFlatButton(text="Annulla", on_release=lambda *_: self._dialog.dismiss()),
-                MDRaisedButton(text="Salva", on_release=lambda *_: self._save_description(exp)),
+                MDFlatButton(text=tr("Annulla"), on_release=lambda *_: self._dialog.dismiss()),
+                MDRaisedButton(text=tr("Salva"), on_release=lambda *_: self._save_description(exp)),
             ],
         )
         self._dialog.open()
@@ -327,17 +352,18 @@ class TripDetailScreen(MDScreen):
             return
         self._dialog.dismiss()
         self.refresh_expenses()
-        toast("Descrizione aggiornata")
+        toast(tr("Descrizione aggiornata"))
 
     def _confirm_delete(self, exp):
         self._dialog.dismiss()
+        desc = exp.description or tr("(senza descrizione)")
         self._dialog = MDDialog(
             auto_dismiss=False,
-            title="Cancellare la spesa?",
-            text=f"{exp.description or '(senza descrizione)'}\nL'operazione non è annullabile.",
+            title=tr("Cancellare la spesa?"),
+            text=f"{desc}\n" + tr("L'operazione non è annullabile."),
             buttons=[
-                MDFlatButton(text="Annulla", on_release=lambda *_: self._dialog.dismiss()),
-                MDRaisedButton(text="Cancella", md_bg_color=(0.8, 0, 0, 1),
+                MDFlatButton(text=tr("Annulla"), on_release=lambda *_: self._dialog.dismiss()),
+                MDRaisedButton(text=tr("Cancella"), md_bg_color=(0.8, 0, 0, 1),
                                on_release=lambda *_: self._do_delete(exp)),
             ],
         )
@@ -349,7 +375,7 @@ class TripDetailScreen(MDScreen):
         self._dialog.dismiss()
         self.refresh_expenses()
         self.refresh_balance()
-        toast("Spesa cancellata")
+        toast(tr("Spesa cancellata"))
 
     # ---- Partecipanti ----------------------------------------------------
     def refresh_people(self):
@@ -359,7 +385,7 @@ class TripDetailScreen(MDScreen):
         lst.clear_widgets()
         people = app.db.list_participants(trip.id)
         if not people:
-            lst.add_widget(OneLineListItem(text="Nessun partecipante"))
+            lst.add_widget(OneLineListItem(text=tr("Nessun partecipante")))
             return
         for p in people:
             lst.add_widget(OneLineListItem(text=p.name))
@@ -384,24 +410,26 @@ class TripDetailScreen(MDScreen):
         bal = core.compute_balance(app.db, app.current_trip.id)
         cur = bal.base_currency
 
-        box.add_widget(self._row("Saldi", bold=True))
+        box.add_widget(self._row(tr("Saldi"), bold=True))
         for name in bal.net:
             net = bal.net[name]
-            stato = "in credito" if net > 0 else ("in debito" if net < 0 else "in pari")
+            stato = tr("in credito") if net > 0 else (tr("in debito") if net < 0 else tr("in pari"))
             box.add_widget(self._row(
-                f"{name}: {format_money(net, cur)} ({stato})  "
-                f"— pagato {format_money(bal.paid[name])}, "
-                f"dovuto {format_money(bal.owed[name])}"
+                tr("{name}: {net} ({state})  — pagato {paid}, dovuto {owed}").format(
+                    name=name, net=format_money(net, cur), state=stato,
+                    paid=format_money(bal.paid[name]), owed=format_money(bal.owed[name]),
+                )
             ))
 
         box.add_widget(self._row(""))
         if not bal.settlements:
-            box.add_widget(self._row("Conti già in pari.", bold=True))
+            box.add_widget(self._row(tr("Conti già in pari."), bold=True))
             return
-        box.add_widget(self._row("Pagamenti suggeriti", bold=True))
+        box.add_widget(self._row(tr("Pagamenti suggeriti"), bold=True))
         for s in bal.settlements:
             box.add_widget(self._row(
-                f"  {s.debtor} deve dare {format_money(s.amount, cur)} a {s.creditor}"
+                "  " + tr("{debtor} deve dare {amount} a {creditor}").format(
+                    debtor=s.debtor, amount=format_money(s.amount, cur), creditor=s.creditor)
             ))
 
     @staticmethod

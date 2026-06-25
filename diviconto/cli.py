@@ -10,7 +10,7 @@ import argparse
 import sys
 from decimal import Decimal
 
-from . import __version__
+from . import __version__, i18n
 from .admin import AdminClient, AdminError
 from .core import (
     SplitSpec, add_expense, add_participant, compute_balance, create_trip,
@@ -74,6 +74,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--db", metavar="PATH",
         help="percorso del file DB (default ~/.diviconto/diviconto.db o env DIVICONTO_DB)",
+    )
+    parser.add_argument(
+        "--lang", choices=("it", "en"),
+        help="lingua dell'output (default: automatica dal sistema / env DIVICONTO_LANG)",
     )
     # I comandi locali lavorano sul SQLite (local=True); quelli 'admin' sul cloud.
     parser.set_defaults(local=True)
@@ -194,13 +198,14 @@ def build_parser() -> argparse.ArgumentParser:
 # ---- handlers ------------------------------------------------------------
 def cmd_trip_create(db: Database, args) -> None:
     trip = create_trip(db, args.name, args.currency, args.desc)
-    print(f"Creato viaggio {trip.name!r} ({trip.base_currency}) — id {trip.id}")
+    print(i18n.tr("Creato viaggio {name} ({cur}) — id {id}").format(
+        name=repr(trip.name), cur=trip.base_currency, id=trip.id))
 
 
 def cmd_trip_list(db: Database, args) -> None:
     trips = db.list_trips()
     if not trips:
-        print("Nessun viaggio.")
+        print(i18n.tr("Nessun viaggio."))
         return
     for t in trips:
         extra = f" — {t.description}" if t.description else ""
@@ -209,49 +214,52 @@ def cmd_trip_list(db: Database, args) -> None:
 
 def cmd_trip_delete(db: Database, args) -> None:
     trip = delete_trip(db, args.trip)
-    print(f"Viaggio {trip.name!r} cancellato (soft-delete). "
-          "Sincronizza dall'app per propagare la cancellazione.")
+    print(i18n.tr("Viaggio {name} cancellato (soft-delete). "
+                  "Sincronizza dall'app per propagare la cancellazione.").format(
+        name=repr(trip.name)))
 
 
 def _sync_logged(db: Database) -> SyncClient:
     """SyncClient con sessione attiva sul DB locale; errore chiaro se non loggato."""
     sync = SyncClient(db)
     if not sync.is_logged_in():
-        raise ValueError(
+        raise ValueError(i18n.tr(
             "operazione online: devi essere connesso. Accedi dall'app usando lo "
             "stesso DB (variabile DIVICONTO_DB) e riprova."
-        )
+        ))
     return sync
 
 
 def cmd_trip_leave(db: Database, args) -> None:
     trip = resolve_trip(db, args.trip)
     _sync_logged(db).leave_trip(trip.id)
-    print(f"Hai abbandonato il viaggio {trip.name!r} (rimosso solo da questo dispositivo).")
+    print(i18n.tr("Hai abbandonato il viaggio {name} (rimosso solo da questo dispositivo).").format(
+        name=repr(trip.name)))
 
 
 def cmd_trip_kick(db: Database, args) -> None:
     trip = resolve_trip(db, args.trip)
     _sync_logged(db).remove_member(trip.id, args.email)
-    print(f"Rimosso {args.email} dal viaggio {trip.name!r}.")
+    print(i18n.tr("Rimosso {email} dal viaggio {name}.").format(email=args.email, name=repr(trip.name)))
 
 
 def cmd_trip_revoke(db: Database, args) -> None:
     trip = resolve_trip(db, args.trip)
     newcode = _sync_logged(db).revoke_sharing(trip.id)
-    print(f"Condivisione revocata per {trip.name!r}. Nuovo codice: {newcode}")
+    print(i18n.tr("Condivisione revocata per {name}. Nuovo codice: {code}").format(
+        name=repr(trip.name), code=newcode))
 
 
 def cmd_person_add(db: Database, args) -> None:
     p = add_participant(db, args.trip, args.name)
-    print(f"Aggiunto partecipante {p.name!r}")
+    print(i18n.tr("Aggiunto partecipante {name}").format(name=repr(p.name)))
 
 
 def cmd_person_list(db: Database, args) -> None:
     trip = resolve_trip(db, args.trip)
     people = db.list_participants(trip.id)
     if not people:
-        print("Nessun partecipante.")
+        print(i18n.tr("Nessun partecipante."))
         return
     for p in people:
         print(p.name)
@@ -271,10 +279,8 @@ def cmd_expense_add(db: Database, args) -> None:
     )
     desc = f" — {exp.description}" if exp.description else ""
     base = format_money(exp.amount_base, resolve_trip(db, args.trip).base_currency)
-    print(
-        f"Registrata spesa {format_money(exp.amount, exp.currency)} "
-        f"(= {base}){desc}"
-    )
+    print(i18n.tr("Registrata spesa {amount} (= {base}){desc}").format(
+        amount=format_money(exp.amount, exp.currency), base=base, desc=desc))
 
 
 def cmd_expense_list(db: Database, args) -> None:
@@ -282,11 +288,11 @@ def cmd_expense_list(db: Database, args) -> None:
     people = {p.id: p.name for p in db.list_participants(trip.id)}
     expenses = db.list_expenses(trip.id)
     if not expenses:
-        print("Nessuna spesa.")
+        print(i18n.tr("Nessuna spesa."))
         return
     for e in expenses:
         payer = people.get(e.payer_id, "?")
-        desc = e.description or "(senza descrizione)"
+        desc = e.description or i18n.tr("(senza descrizione)")
         orig = format_money(e.amount, e.currency)
         base = format_money(e.amount_base, trip.base_currency)
         line = f"{payer}: {orig}"
@@ -299,8 +305,9 @@ def cmd_balance(db: Database, args) -> None:
     trip = resolve_trip(db, args.trip)
     bal: Balance = compute_balance(db, args.trip)
     cur = bal.base_currency
-    print(f"Bilancio viaggio {trip.name!r} (valuta {cur})\n")
-    print(f"{'Partecipante':<16}{'Pagato':>12}{'Dovuto':>12}{'Saldo':>12}")
+    print(i18n.tr("Bilancio viaggio {name} (valuta {cur})").format(name=repr(trip.name), cur=cur) + "\n")
+    print(f"{i18n.tr('Partecipante'):<16}{i18n.tr('Pagato'):>12}"
+          f"{i18n.tr('Dovuto'):>12}{i18n.tr('Saldo'):>12}")
     print("-" * 52)
     for name in bal.net:
         print(
@@ -309,11 +316,12 @@ def cmd_balance(db: Database, args) -> None:
         )
     print()
     if not bal.settlements:
-        print("Conti già in pari.")
+        print(i18n.tr("Conti già in pari."))
         return
-    print("Pagamenti suggeriti:")
+    print(i18n.tr("Pagamenti suggeriti:"))
     for s in bal.settlements:
-        print(f"  {s.debtor} deve dare {format_money(s.amount, cur)} a {s.creditor}")
+        print("  " + i18n.tr("{debtor} deve dare {amount} a {creditor}").format(
+            debtor=s.debtor, amount=format_money(s.amount, cur), creditor=s.creditor))
 
 
 # ---- handlers admin (cloud) ----------------------------------------------
@@ -371,7 +379,20 @@ def cmd_admin_purge_user(args) -> None:
     _dry_run_notice(args)
 
 
+def _lang_from_argv(argv) -> str:
+    """Pre-scansione di --lang prima di costruire il parser (l'help usa tr())."""
+    for i, a in enumerate(argv):
+        if a == "--lang" and i + 1 < len(argv):
+            return argv[i + 1]
+        if a.startswith("--lang="):
+            return a.split("=", 1)[1]
+    return ""
+
+
 def main(argv=None) -> int:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    # Lingua: --lang > env DIVICONTO_LANG > locale di sistema > inglese.
+    i18n.set_language(i18n.resolve_language(explicit=_lang_from_argv(raw) or None))
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
@@ -383,7 +404,7 @@ def main(argv=None) -> int:
             # Comandi 'admin' (cloud): non toccano il DB locale, ricevono (args).
             args.func(args)
     except (ValueError, AdminError, SyncError) as exc:
-        print(f"Errore: {exc}", file=sys.stderr)
+        print(i18n.tr("Errore: {exc}").format(exc=exc), file=sys.stderr)
         return 1
     return 0
 

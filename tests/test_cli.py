@@ -18,7 +18,10 @@ class TestCliEndToEnd(unittest.TestCase):
 
     def run_cli(self, *args):
         cmd = [sys.executable, "-m", "diviconto", "--db", self.db, *args]
-        return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+        # Forza l'italiano: i test verificano stringhe italiane a prescindere
+        # dalla lingua del sistema su cui girano.
+        env = {**os.environ, "DIVICONTO_LANG": "it"}
+        return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env=env)
 
     def test_help(self):
         r = self.run_cli("-h")

@@ -17,10 +17,12 @@ from kivy.lang import Builder
 from kivy.uix.screenmanager import ScreenManager, SlideTransition
 from kivymd.app import MDApp
 
+from diviconto import i18n
 from diviconto.db import Database
 from diviconto.sync import SyncClient
 from ui.screens.auth import AuthScreen
 from ui.screens.expense_form import ExpenseFormScreen
+from ui.screens.settings import SettingsScreen
 from ui.screens.trip_detail import TripDetailScreen
 from ui.screens.trips import TripsScreen
 
@@ -57,16 +59,39 @@ class DiviContoApp(MDApp):
         self.sync = SyncClient(self.db)
         self.current_trip = None  # viaggio selezionato (impostato da TripsScreen)
 
+        # Lingua: impostazione salvata > env/telefono > inglese di riserva.
+        i18n.set_language(i18n.resolve_language(saved=self.db.get_state("lang")))
+
         Builder.load_file(KV_PATH)
 
+        sm = self._build_screens()
+        # Se già loggato si va diritti ai viaggi, altrimenti alla schermata auth.
+        sm.current = "trips" if self.sync.is_logged_in() else "auth"
+        return sm
+
+    def _build_screens(self) -> ScreenManager:
         sm = ScreenManager(transition=SlideTransition())
         sm.add_widget(AuthScreen(name="auth"))
         sm.add_widget(TripsScreen(name="trips"))
         sm.add_widget(TripDetailScreen(name="trip_detail"))
         sm.add_widget(ExpenseFormScreen(name="expense_form"))
-        # Se già loggato si va diritti ai viaggi, altrimenti alla schermata auth.
-        sm.current = "trips" if self.sync.is_logged_in() else "auth"
+        sm.add_widget(SettingsScreen(name="settings"))
         return sm
+
+    def tr(self, text: str) -> str:
+        """Traduzione usata anche dai .kv (``app.tr("…")``)."""
+        return i18n.tr(text)
+
+    def change_language(self, lang: str) -> None:
+        """Salva la lingua e ricostruisce le schermate per applicarla."""
+        self.db.set_state("lang", lang)
+        i18n.set_language(lang)
+        target = self.root.current if self.root else "settings"
+        Window.remove_widget(self.root)
+        self.root = self._build_screens()
+        Window.add_widget(self.root)
+        names = [s.name for s in self.root.screens]
+        self.root.current = target if target in names else "trips"
 
     def run_async(self, func, on_done=None, on_error=None):
         """Esegue ``func`` in un thread; le callback tornano sul thread UI."""

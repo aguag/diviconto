@@ -1,10 +1,11 @@
 # Layout dichiarativo delle schermate di DiviConto (KivyMD 1.2.0).
+# Le scritte passano da app.tr(...) per la localizzazione (vedi diviconto/i18n.py).
 
 <AuthScreen>:
     MDBoxLayout:
         orientation: "vertical"
         MDTopAppBar:
-            title: "DiviConto — Accedi"
+            title: app.tr("DiviConto — Accedi")
         MDFloatLayout:
             MDBoxLayout:
                 orientation: "vertical"
@@ -13,12 +14,15 @@
                 size_hint: None, None
                 width: min(root.width - dp(48), dp(360))
                 height: self.minimum_height
-                pos_hint: {"center_x": .5, "center_y": .55}
+                pos_hint: {"center_x": .5, "top": .92}
                 adaptive_height: True
                 MDLabel:
-                    text: "Accedi per sincronizzare le spese del tuo viaggio"
+                    text: app.tr("Accedi per sincronizzare le spese del tuo viaggio")
                     halign: "center"
                     adaptive_height: True
+                    size_hint_y: None
+                    text_size: self.width, None
+                    height: self.texture_size[1]
                 MDBoxLayout:
                     orientation: "vertical"
                     adaptive_height: True
@@ -26,7 +30,7 @@
                     height: self.minimum_height
                     spacing: "2dp"
                     MDLabel:
-                        text: "Email"
+                        text: app.tr("Email")
                         bold: True
                         theme_text_color: "Primary"
                         adaptive_height: True
@@ -44,7 +48,7 @@
                     height: self.minimum_height
                     spacing: "2dp"
                     MDLabel:
-                        text: "Password"
+                        text: app.tr("Password")
                         bold: True
                         theme_text_color: "Primary"
                         adaptive_height: True
@@ -56,15 +60,15 @@
                         mode: "rectangle"
                         password: True
                 MDRaisedButton:
-                    text: "Accedi"
+                    text: app.tr("Accedi")
                     pos_hint: {"center_x": .5}
                     on_release: root.do_login()
                 MDFlatButton:
-                    text: "Registrati"
+                    text: app.tr("Registrati")
                     pos_hint: {"center_x": .5}
                     on_release: root.do_signup()
                 MDFlatButton:
-                    text: "Continua senza account (solo su questo telefono)"
+                    text: app.tr("Continua senza account (solo su questo telefono)")
                     pos_hint: {"center_x": .5}
                     on_release: root.use_offline()
                 MDLabel:
@@ -79,10 +83,11 @@
     MDBoxLayout:
         orientation: "vertical"
         MDTopAppBar:
-            title: "DiviConto — Viaggi"
+            title: app.tr("DiviConto — Viaggi")
             right_action_items:
-                [["sync", lambda x: root.do_sync(), "Sincronizza"], \
-                ["account-multiple-plus", lambda x: root.open_join_dialog(), "Unisciti a un viaggio"]]
+                [["sync", lambda x: root.do_sync(), app.tr("Sincronizza")], \
+                ["account-multiple-plus", lambda x: root.open_join_dialog(), app.tr("Unisciti a un viaggio")], \
+                ["cog", lambda x: root.open_settings(), app.tr("Impostazioni")]]
         MDBoxLayout:
             size_hint_y: None
             height: "52dp"
@@ -97,7 +102,7 @@
                 shorten_from: "right"
             MDRaisedButton:
                 id: account_btn
-                text: "Esci"
+                text: app.tr("Esci")
                 pos_hint: {"center_y": .5}
                 on_release: root.account_action()
         MDFloatLayout:
@@ -116,18 +121,18 @@
         orientation: "vertical"
         MDTopAppBar:
             id: topbar
-            title: "Viaggio"
+            title: app.tr("Viaggio")
             left_action_items: [["arrow-left", lambda x: root.go_back()]]
             right_action_items:
-                [["sync", lambda x: root.do_sync(), "Sincronizza"], \
-                ["share-variant", lambda x: root.show_share_code(), "Condividi"], \
-                ["dots-vertical", lambda x: root.open_trip_menu(), "Gestisci viaggio"]]
+                [["sync", lambda x: root.do_sync(), app.tr("Sincronizza")], \
+                ["share-variant", lambda x: root.show_share_code(), app.tr("Condividi")], \
+                ["dots-vertical", lambda x: root.open_trip_menu(), app.tr("Gestisci viaggio")]]
         MDBottomNavigation:
             id: bottom_nav
 
             MDBottomNavigationItem:
                 name: "expenses"
-                text: "Spese"
+                text: app.tr("Spese")
                 icon: "receipt"
                 MDFloatLayout:
                     ScrollView:
@@ -140,7 +145,7 @@
 
             MDBottomNavigationItem:
                 name: "people"
-                text: "Persone"
+                text: app.tr("Persone")
                 icon: "account-group"
                 MDBoxLayout:
                     orientation: "vertical"
@@ -151,10 +156,10 @@
                         spacing: "8dp"
                         FormTextField:
                             id: new_person
-                            hint_text: "Nome partecipante"
+                            hint_text: app.tr("Nome partecipante")
                             mode: "rectangle"
                         MDRaisedButton:
-                            text: "Aggiungi"
+                            text: app.tr("Aggiungi")
                             size_hint_x: None
                             width: "120dp"
                             on_release: root.add_person()
@@ -164,7 +169,7 @@
 
             MDBottomNavigationItem:
                 name: "balance"
-                text: "Bilancio"
+                text: app.tr("Bilancio")
                 icon: "scale-balance"
                 ScrollView:
                     MDBoxLayout:
@@ -180,7 +185,7 @@
     MDBoxLayout:
         orientation: "vertical"
         MDTopAppBar:
-            title: "Nuova spesa"
+            title: app.tr("Nuova spesa")
             left_action_items: [["arrow-left", lambda x: root.go_back()]]
         ScrollView:
             MDBoxLayout:
@@ -191,8 +196,35 @@
                 padding: "16dp"
                 spacing: "12dp"
         MDRaisedButton:
-            text: "Salva spesa"
+            text: app.tr("Salva spesa")
             pos_hint: {"center_x": .5}
             size_hint_y: None
             height: "48dp"
             on_release: root.save()
+
+
+<SettingsScreen>:
+    MDBoxLayout:
+        orientation: "vertical"
+        MDTopAppBar:
+            title: app.tr("Impostazioni")
+            left_action_items: [["arrow-left", lambda x: root.go_back()]]
+        MDBoxLayout:
+            orientation: "vertical"
+            padding: "16dp"
+            spacing: "12dp"
+            MDLabel:
+                text: app.tr("Lingua")
+                bold: True
+                adaptive_height: True
+                size_hint_y: None
+                height: self.texture_size[1]
+            MDRaisedButton:
+                text: app.tr("Italiano")
+                pos_hint: {"center_x": .5}
+                on_release: root.set_language("it")
+            MDRaisedButton:
+                text: app.tr("English")
+                pos_hint: {"center_x": .5}
+                on_release: root.set_language("en")
+            MDBoxLayout:

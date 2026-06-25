@@ -12,6 +12,7 @@ from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
 
 from diviconto import core
+from diviconto.i18n import tr
 from ui.widgets import FormTextField, toast
 
 
@@ -33,35 +34,35 @@ class ExpenseFormScreen(MDScreen):
 
         # Pagante (menu a tendina)
         self.payer_btn = MDRaisedButton(
-            text=f"Pagante: {self.payer_name}",
+            text=tr("Pagante: {name}").format(name=self.payer_name),
             on_release=lambda *_: self._open_payer_menu(),
         )
         box.add_widget(self._wrap(self.payer_btn))
 
         # Importo e valuta
-        self.amount_field = FormTextField(hint_text="Importo", input_filter="float")
+        self.amount_field = FormTextField(hint_text=tr("Importo"), input_filter="float")
         box.add_widget(self.amount_field)
 
         self.currency_field = FormTextField(
-            hint_text="Valuta", text=trip.base_currency,
+            hint_text=tr("Valuta"), text=trip.base_currency,
         )
         box.add_widget(self.currency_field)
 
         self.rate_field = FormTextField(
-            hint_text=f"Tasso verso {trip.base_currency} (solo se valuta diversa)",
+            hint_text=tr("Tasso verso {cur} (solo se valuta diversa)").format(cur=trip.base_currency),
             input_filter="float",
         )
         box.add_widget(self.rate_field)
 
-        self.desc_field = FormTextField(hint_text="Descrizione")
+        self.desc_field = FormTextField(hint_text=tr("Descrizione"))
         box.add_widget(self.desc_field)
 
         # Tipo divisione
-        box.add_widget(MDLabel(text="Divisione", font_style="Subtitle2",
+        box.add_widget(MDLabel(text=tr("Divisione"), font_style="Subtitle2",
                                adaptive_height=True, size_hint_y=None, height="24dp"))
-        self.equal_btn = MDRaisedButton(text="Parti uguali",
+        self.equal_btn = MDRaisedButton(text=tr("Parti uguali"),
                                         on_release=lambda *_: self._set_mode("equal"))
-        self.exact_btn = MDRaisedButton(text="Importi esatti",
+        self.exact_btn = MDRaisedButton(text=tr("Importi esatti"),
                                         on_release=lambda *_: self._set_mode("exact"))
         row = MDBoxLayout(orientation="horizontal", spacing="8dp",
                           size_hint_y=None, height="48dp")
@@ -97,21 +98,21 @@ class ExpenseFormScreen(MDScreen):
 
     def _set_payer(self, name):
         self.payer_name = name
-        self.payer_btn.text = f"Pagante: {name}"
+        self.payer_btn.text = tr("Pagante: {name}").format(name=name)
         if self._menu:
             self._menu.dismiss()
 
     # ---- modalità divisione ---------------------------------------------
     def _set_mode(self, mode):
         self.split_mode = mode
-        self.equal_btn.text = ("✓ " if mode == "equal" else "") + "Parti uguali"
-        self.exact_btn.text = ("✓ " if mode == "exact" else "") + "Importi esatti"
+        self.equal_btn.text = ("✓ " if mode == "equal" else "") + tr("Parti uguali")
+        self.exact_btn.text = ("✓ " if mode == "exact" else "") + tr("Importi esatti")
 
         self.exact_box.clear_widgets()
         if mode == "exact":
             self.exact_fields = {}
             for p in self.participants:
-                field = FormTextField(hint_text=f"Quota di {p.name}", input_filter="float")
+                field = FormTextField(hint_text=tr("Quota di {name}").format(name=p.name), input_filter="float")
                 self.exact_fields[p.name] = field
                 self.exact_box.add_widget(field)
             self.exact_box.height = len(self.participants) * 56
@@ -135,7 +136,7 @@ class ExpenseFormScreen(MDScreen):
                 try:
                     amounts[name] = Decimal(text)
                 except InvalidOperation:
-                    toast(f"Importo non valido per {name}")
+                    toast(tr("Importo non valido per {name}").format(name=name))
                     return
             split = core.SplitSpec(mode="exact", amounts=amounts)
 
