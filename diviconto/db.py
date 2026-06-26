@@ -287,6 +287,39 @@ class Database:
             expenses.append(exp)
         return expenses
 
+    def get_expense(self, expense_id: str) -> Optional[Expense]:
+        row = self.conn.execute(
+            "SELECT * FROM expenses WHERE deleted = 0 AND id = ?", (expense_id,)
+        ).fetchone()
+        if not row:
+            return None
+        exp = self._row_to_expense(row)
+        exp.splits = self._splits_for(exp.id)
+        return exp
+
+    def update_expense(self, expense: Expense) -> None:
+        """Aggiorna una spesa e ne sostituisce le quote (tombstone+insert, dirty)."""
+        ts = now_iso()
+        with self.conn:
+            self.conn.execute(
+                "UPDATE expenses SET payer_id = ?, amount = ?, currency = ?, "
+                "rate_to_base = ?, amount_base = ?, description = ?, updated_at = ?, "
+                "dirty = 1 WHERE id = ?",
+                (expense.payer_id, str(expense.amount), expense.currency,
+                 str(expense.rate_to_base), str(expense.amount_base),
+                 expense.description, ts, expense.id),
+            )
+            self.conn.execute(
+                "UPDATE splits SET deleted = 1, updated_at = ?, dirty = 1 WHERE expense_id = ?",
+                (ts, expense.id),
+            )
+            for s in expense.splits:
+                self.conn.execute(
+                    "INSERT INTO splits (id, expense_id, participant_id, mode, "
+                    "share_base, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (s.id, s.expense_id, s.participant_id, s.mode, str(s.share_base), ts, ts),
+                )
+
     def update_expense_description(self, expense_id: str, description: str) -> None:
         """Aggiorna la descrizione di una spesa (la marca dirty per il sync)."""
         self.conn.execute(

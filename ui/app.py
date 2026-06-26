@@ -58,6 +58,7 @@ class DiviContoApp(MDApp):
         self.db = Database(db_path)
         self.sync = SyncClient(self.db)
         self.current_trip = None  # viaggio selezionato (impostato da TripsScreen)
+        self.editing_expense = None  # spesa in modifica (None = nuova spesa)
 
         # Lingua: impostazione salvata > env/telefono > inglese di riserva.
         i18n.set_language(i18n.resolve_language(saved=self.db.get_state("lang")))

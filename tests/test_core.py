@@ -3,7 +3,8 @@ from decimal import Decimal
 
 from diviconto.core import (
     SplitSpec, add_expense, add_participant, compute_balance, create_trip,
-    delete_expense, delete_participant, rename_participant, update_expense_description,
+    delete_expense, delete_participant, rename_participant, update_expense,
+    update_expense_description,
 )
 from diviconto.db import Database
 
@@ -20,6 +21,30 @@ class CoreTestBase(unittest.TestCase):
 
     def net(self):
         return compute_balance(self.db, "Spagna").net
+
+
+class TestUpdateExpense(CoreTestBase):
+    def test_equal_to_exact(self):
+        e = add_expense(self.db, "Spagna", "Anna", "100", description="cena",
+                        split=SplitSpec("equal"))
+        update_expense(self.db, e.id, "Anna", "100", description="cena",
+                       split=SplitSpec("exact", amounts={"Anna": Decimal("70"),
+                                                         "Bob": Decimal("30")}))
+        net = self.net()
+        self.assertEqual(net["Anna"], Decimal("30.00"))   # paga 100, deve 70
+        self.assertEqual(net["Bob"], Decimal("-30.00"))
+        exps = self.db.list_expenses(self.trip.id)
+        self.assertEqual(len(exps), 1)          # è un aggiornamento, non una nuova spesa
+        self.assertEqual(exps[0].id, e.id)
+        self.assertEqual(exps[0].splits[0].mode, "exact")
+
+    def test_exact_sum_mismatch_raises(self):
+        e = add_expense(self.db, "Spagna", "Anna", "100", description="cena",
+                        split=SplitSpec("equal"))
+        with self.assertRaises(ValueError):
+            update_expense(self.db, e.id, "Anna", "100", description="cena",
+                           split=SplitSpec("exact", amounts={"Anna": Decimal("70"),
+                                                             "Bob": Decimal("20")}))
 
 
 class TestDeleteParticipant(CoreTestBase):

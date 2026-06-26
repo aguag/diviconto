@@ -199,6 +199,56 @@ def delete_expense(db: Database, expense_id: str) -> None:
     db.delete_expense(expense_id)
 
 
+def update_expense(
+    db: Database,
+    expense_id: str,
+    payer_name: str,
+    amount,
+    description: str = "",
+    currency: Optional[str] = None,
+    rate=None,
+    split: Optional[SplitSpec] = None,
+) -> Expense:
+    """Aggiorna una spesa esistente (pagante, importo, valuta, descrizione,
+    tipo di divisione). Stesse validazioni di ``add_expense``."""
+    exp = db.get_expense(expense_id)
+    if exp is None:
+        raise NotFoundError(tr("spesa non trovata"))
+    trip = resolve_trip(db, exp.trip_id)
+    participants = db.list_participants(trip.id)
+
+    if not description.strip():
+        raise ValueError(tr("la descrizione della spesa è obbligatoria"))
+    payer = _participant_or_error(db, trip, payer_name)
+    amount = to_money(amount)
+    if amount <= 0:
+        raise ValueError(tr("l'importo della spesa deve essere positivo"))
+
+    currency = (currency or trip.base_currency).strip().upper()
+    if currency == trip.base_currency:
+        rate_dec = Decimal("1")
+    else:
+        if rate is None:
+            raise ValueError(
+                tr("valuta {cur} diversa dalla base {base}: "
+                   "serve --rate (tasso verso la valuta base)").format(
+                    cur=currency, base=trip.base_currency)
+            )
+        rate_dec = to_rate(rate)
+    amount_base = convert(amount, rate_dec)
+
+    if split is None:
+        split = SplitSpec(mode="equal")
+    updated = Expense(
+        id=exp.id, trip_id=trip.id, payer_id=payer.id, amount=amount,
+        currency=currency, rate_to_base=rate_dec, amount_base=amount_base,
+        description=description.strip(),
+    )
+    updated.splits = _build_splits(db, trip, participants, updated, split, rate_dec)
+    db.update_expense(updated)
+    return updated
+
+
 def delete_trip(db: Database, trip_ref: str) -> Trip:
     """Cancella (soft-delete) un intero viaggio. Ritorna il viaggio cancellato."""
     trip = resolve_trip(db, trip_ref)

@@ -118,8 +118,10 @@ La UI offre: elenco/creazione viaggi, gestione partecipanti, inserimento spese
 (parti uguali o importi esatti, multi-valuta con tasso; **descrizione
 obbligatoria**) e schermata bilancio con saldi e pagamenti suggeriti. Ogni spesa
 mostra **data e ora**; toccandola si apre un riepilogo (pagante, tipo di
-divisione e **quota di ciascun partecipante**) da cui si può **modificare la
-descrizione** o **cancellarla**. Per gli **importi esatti** la somma delle quote
+divisione e **quota di ciascun partecipante**) da cui si può **Modificare la
+spesa** — riapre il form precompilato per cambiare pagante, importo, valuta,
+descrizione e **tipo di divisione** (parti uguali ↔ importi esatti) — o
+**eliminarla**. Per gli **importi esatti** la somma delle quote
 deve coincidere con l'importo (validato al salvataggio). Nel tab **Persone**,
 toccando un partecipante lo si può **rinominare** o **eliminare** dal viaggio: in
 quel caso i suoi movimenti (quote e pagamenti) vengono **ridistribuiti ai

@@ -318,8 +318,8 @@ class TripDetailScreen(MDScreen):
             title=tr("Spesa"),
             text=self._expense_detail_text(exp),
             buttons=[
-                MDFlatButton(text=tr("Modifica descrizione"),
-                             on_release=lambda *_: self._edit_description(exp)),
+                MDFlatButton(text=tr("Modifica spesa"),
+                             on_release=lambda *_: self._open_edit_expense(exp)),
                 MDFlatButton(text=tr("Elimina Spesa"), theme_text_color="Custom",
                              text_color=(0.8, 0, 0, 1),
                              on_release=lambda *_: self._confirm_delete(exp)),
@@ -328,31 +328,12 @@ class TripDetailScreen(MDScreen):
         )
         self._dialog.open()
 
-    def _edit_description(self, exp):
+    def _open_edit_expense(self, exp):
+        """Apre il form di inserimento in modalità modifica per questa spesa."""
         self._dialog.dismiss()
-        self._edit_field = FormTextField(text=exp.description, hint_text=tr("Descrizione"))
-        self._dialog = MDDialog(
-            auto_dismiss=False,
-            title=tr("Modifica descrizione"),
-            type="custom",
-            content_cls=self._edit_field,
-            buttons=[
-                MDFlatButton(text=tr("Annulla"), on_release=lambda *_: self._dialog.dismiss()),
-                MDRaisedButton(text=tr("Salva"), on_release=lambda *_: self._save_description(exp)),
-            ],
-        )
-        self._dialog.open()
-
-    def _save_description(self, exp):
         app = MDApp.get_running_app()
-        try:
-            core.update_expense_description(app.db, exp.id, self._edit_field.text)
-        except ValueError as exc:
-            toast(str(exc))
-            return
-        self._dialog.dismiss()
-        self.refresh_expenses()
-        toast(tr("Descrizione aggiornata"))
+        app.editing_expense = exp
+        self.manager.current = "expense_form"
 
     def _confirm_delete(self, exp):
         self._dialog.dismiss()

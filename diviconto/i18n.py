@@ -171,6 +171,7 @@ _TRANSLATIONS = {
         "Parti uguali": "Equal split",
         "Importi esatti": "Exact amounts",
         "Modifica descrizione": "Edit description",
+        "Modifica spesa": "Edit expense",
         "Elimina Spesa": "Delete expense",
         "Descrizione": "Description",
         "Descrizione aggiornata": "Description updated",
@@ -253,6 +254,7 @@ _TRANSLATIONS = {
             "amount ({amount} {currency})",
         "modalità di divisione sconosciuta: {mode}":
             "unknown split mode: {mode}",
+        "spesa non trovata": "expense not found",
         # -- CLI (output dei comandi) --
         "Errore: {exc}": "Error: {exc}",
         "Creato viaggio {name} ({cur}) — id {id}": "Created trip {name} ({cur}) — id {id}",
