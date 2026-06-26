@@ -206,6 +206,95 @@ def delete_trip(db: Database, trip_ref: str) -> Trip:
     return trip
 
 
+# ---- Partecipanti: rinomina / elimina ------------------------------------
+def rename_participant(db: Database, trip_ref: str, old_name: str, new_name: str) -> Participant:
+    """Corregge il nome di un partecipante (non vuoto, non duplicato)."""
+    trip = resolve_trip(db, trip_ref)
+    p = _participant_or_error(db, trip, old_name)
+    new_name = new_name.strip()
+    if not new_name:
+        raise ValueError(tr("il nome del partecipante non può essere vuoto"))
+    existing = db.get_participant_by_name(trip.id, new_name)
+    if existing and existing.id != p.id:
+        raise ValueError(tr("partecipante {name} già presente nel viaggio").format(name=repr(new_name)))
+    db.rename_participant(p.id, new_name)
+    return p
+
+
+def _scale_shares(shares: dict, total: Decimal, target: Decimal) -> dict:
+    """Riscalonature le quote ``shares`` (somma=total) a sommare ``target``."""
+    ids = list(shares)
+    if total == 0 or not ids:
+        return {pid: Decimal("0.00") for pid in ids}
+    scaled = [to_money(shares[pid] * target / total) for pid in ids]
+    drift = to_money(target - sum(scaled, Decimal("0.00")))
+    scaled[-1] = to_money(scaled[-1] + drift)
+    return dict(zip(ids, scaled))
+
+
+def _insert_base_expense(db: Database, trip: Trip, payer_id: str,
+                         amount_base: Decimal, description: str, shares: dict) -> None:
+    """Crea una spesa in valuta base con quote esplicite (per la riassegnazione)."""
+    eid = new_id()
+    splits = [Split(new_id(), eid, pid, "equal", share) for pid, share in shares.items()]
+    db.add_expense(Expense(
+        id=eid, trip_id=trip.id, payer_id=payer_id,
+        amount=amount_base, currency=trip.base_currency, rate_to_base=Decimal("1"),
+        amount_base=amount_base, description=description, splits=splits,
+    ))
+
+
+def delete_participant(db: Database, trip_ref: str, name: str) -> Participant:
+    """Elimina un partecipante; i suoi movimenti sono stornati ai rimanenti.
+
+    - la sua **quota** in ogni spesa è ridistribuita in parti uguali tra gli
+      altri partecipanti di quella spesa;
+    - le spese che ha **pagato** sono riassegnate ai rimanenti partecipanti di
+      quella spesa in parti uguali (la spesa è spezzata in più voci, una per
+      pagante, in valuta base).
+    """
+    trip = resolve_trip(db, trip_ref)
+    p = _participant_or_error(db, trip, name)
+
+    for exp in db.list_expenses(trip.id):
+        splits = {s.participant_id: s for s in exp.splits}
+        p_split = splits.get(p.id)
+        p_is_payer = exp.payer_id == p.id
+        if p_split is None and not p_is_payer:
+            continue  # P non è coinvolto in questa spesa
+
+        other_ids = [pid for pid in splits if pid != p.id]
+        p_share = p_split.share_base if p_split else Decimal("0.00")
+        new_shares: dict = {}
+        if other_ids:
+            adds = _split_equally(p_share, len(other_ids))
+            for pid, add in zip(other_ids, adds):
+                new_shares[pid] = to_money(splits[pid].share_base + add)
+
+        if not p_is_payer:
+            # Il pagante resta: aggiorna le quote in place (rimuovi quella di P).
+            if new_shares:
+                if p_split:
+                    db.soft_delete_split(p_split.id)
+                for pid, val in new_shares.items():
+                    db.update_split_share(splits[pid].id, val)
+            else:
+                db.delete_expense(exp.id)  # nessun consumatore rimasto
+        else:
+            # P pagava: spezza la spesa, pagamento ai rimanenti sharer in parti uguali.
+            db.delete_expense(exp.id)
+            if new_shares:
+                portions = _split_equally(exp.amount_base, len(other_ids))
+                for r_id, portion in zip(other_ids, portions):
+                    _insert_base_expense(
+                        db, trip, r_id, portion, exp.description,
+                        _scale_shares(new_shares, exp.amount_base, portion),
+                    )
+
+    db.delete_participant(p.id)
+    return p
+
+
 # ---- Balance -------------------------------------------------------------
 def compute_balance(db: Database, trip_ref: str) -> Balance:
     trip = resolve_trip(db, trip_ref)

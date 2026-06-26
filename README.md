@@ -120,7 +120,10 @@ obbligatoria**) e schermata bilancio con saldi e pagamenti suggeriti. Ogni spesa
 mostra **data e ora**; toccandola si apre un riepilogo (pagante, tipo di
 divisione e **quota di ciascun partecipante**) da cui si può **modificare la
 descrizione** o **cancellarla**. Per gli **importi esatti** la somma delle quote
-deve coincidere con l'importo (validato al salvataggio). Dalla pagina del viaggio si può **Sincronizzare** e
+deve coincidere con l'importo (validato al salvataggio). Nel tab **Persone**,
+toccando un partecipante lo si può **rinominare** o **eliminare** dal viaggio: in
+quel caso i suoi movimenti (quote e pagamenti) vengono **ridistribuiti ai
+rimanenti in parti uguali** (da CLI: `divc person rename|delete`). Dalla pagina del viaggio si può **Sincronizzare** e
 **Condividere** il codice. Nella lista, i viaggi condivisi mostrano una riga
 **"Condiviso con: …"** con le email degli altri membri. Dal menu **⋮** (in alto
 nel dettaglio): il creatore può **eliminare il viaggio** o **gestire la

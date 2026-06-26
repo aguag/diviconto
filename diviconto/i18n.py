@@ -213,6 +213,17 @@ _TRANSLATIONS = {
             "{name}: {net} ({state})  — paid {paid}, owed {owed}",
         "{debtor} deve dare {amount} a {creditor}":
             "{debtor} owes {amount} to {creditor}",
+        # -- partecipante: rinomina / elimina --
+        "Cosa vuoi fare con questo partecipante?":
+            "What do you want to do with this participant?",
+        "Correggi nome": "Edit name",
+        "Elimina dal viaggio": "Remove from trip",
+        "Nuovo nome": "New name",
+        "Nome aggiornato": "Name updated",
+        "Eliminare {name} dal viaggio?": "Remove {name} from the trip?",
+        "I suoi movimenti verranno ridistribuiti agli altri partecipanti.":
+            "Their movements will be redistributed to the other participants.",
+        "Partecipante eliminato": "Participant removed",
         # -- errori core (messaggi sollevati come ValueError) --
         "la descrizione della spesa è obbligatoria":
             "the expense description is required",
@@ -260,6 +271,9 @@ _TRANSLATIONS = {
         "Condivisione revocata per {name}. Nuovo codice: {code}":
             "Sharing revoked for {name}. New code: {code}",
         "Aggiunto partecipante {name}": "Added participant {name}",
+        "Rinominato {old} in {new}": "Renamed {old} to {new}",
+        "Eliminato {name}; movimenti ridistribuiti ai rimanenti.":
+            "Removed {name}; movements redistributed to the others.",
         "Nessun partecipante.": "No participants.",
         "Registrata spesa {amount} (= {base}){desc}":
             "Expense recorded {amount} (= {base}){desc}",

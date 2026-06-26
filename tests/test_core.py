@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from diviconto.core import (
     SplitSpec, add_expense, add_participant, compute_balance, create_trip,
-    delete_expense, update_expense_description,
+    delete_expense, delete_participant, rename_participant, update_expense_description,
 )
 from diviconto.db import Database
 
@@ -20,6 +20,49 @@ class CoreTestBase(unittest.TestCase):
 
     def net(self):
         return compute_balance(self.db, "Spagna").net
+
+
+class TestDeleteParticipant(CoreTestBase):
+    def test_rename(self):
+        rename_participant(self.db, "Spagna", "Bob", "Roberto")
+        names = [p.name for p in self.db.list_participants(self.trip.id)]
+        self.assertIn("Roberto", names)
+        self.assertNotIn("Bob", names)
+
+    def test_rename_duplicate_raises(self):
+        with self.assertRaises(ValueError):
+            rename_participant(self.db, "Spagna", "Bob", "Anna")
+
+    def test_delete_non_payer_redistributes_share(self):
+        add_participant(self.db, "Spagna", "Cleo")
+        add_expense(self.db, "Spagna", "Anna", "90", description="cena", split=SplitSpec("equal"))
+        delete_participant(self.db, "Spagna", "Cleo")
+        net = self.net()
+        self.assertNotIn("Cleo", net)
+        self.assertEqual(net["Anna"], Decimal("45.00"))   # 90 - 45
+        self.assertEqual(net["Bob"], Decimal("-45.00"))
+        self.assertEqual(sum(net.values()), Decimal("0.00"))
+
+    def test_delete_payer_splits_and_washes_out(self):
+        add_participant(self.db, "Spagna", "Cleo")
+        add_expense(self.db, "Spagna", "Anna", "90", description="cena", split=SplitSpec("equal"))
+        delete_participant(self.db, "Spagna", "Anna")  # Anna è il pagante
+        net = self.net()
+        self.assertNotIn("Anna", net)
+        self.assertEqual(net["Bob"], Decimal("0.00"))
+        self.assertEqual(net["Cleo"], Decimal("0.00"))
+        # spesa pagata da Anna spezzata in 2 voci (una per pagante rimanente)
+        self.assertEqual(len(self.db.list_expenses(self.trip.id)), 2)
+
+    def test_delete_payer_two_people(self):
+        add_expense(self.db, "Spagna", "Anna", "100", description="cena", split=SplitSpec("equal"))
+        delete_participant(self.db, "Spagna", "Anna")
+        net = self.net()
+        self.assertEqual(net["Bob"], Decimal("0.00"))
+        exps = self.db.list_expenses(self.trip.id)
+        self.assertEqual(len(exps), 1)
+        bob = self.db.get_participant_by_name(self.trip.id, "Bob")
+        self.assertEqual(exps[0].payer_id, bob.id)
 
 
 class TestEqualSplit(CoreTestBase):

@@ -388,7 +388,69 @@ class TripDetailScreen(MDScreen):
             lst.add_widget(OneLineListItem(text=tr("Nessun partecipante")))
             return
         for p in people:
-            lst.add_widget(OneLineListItem(text=p.name))
+            item = OneLineListItem(text=p.name)
+            item.bind(on_release=lambda _w, pp=p: self.open_participant_actions(pp))
+            lst.add_widget(item)
+
+    # ---- Azioni su un partecipante (rinomina / elimina) ------------------
+    def open_participant_actions(self, p):
+        self._dialog = MDDialog(
+            auto_dismiss=False, title=p.name,
+            text=tr("Cosa vuoi fare con questo partecipante?"),
+            buttons=[
+                MDFlatButton(text=tr("Correggi nome"),
+                             on_release=lambda *_: self._rename_participant_dialog(p)),
+                MDFlatButton(text=tr("Elimina dal viaggio"), theme_text_color="Custom",
+                             text_color=(0.8, 0, 0, 1),
+                             on_release=lambda *_: self._confirm_delete_participant(p)),
+                MDFlatButton(text=tr("Chiudi"), on_release=lambda *_: self._dialog.dismiss()),
+            ],
+        )
+        self._dialog.open()
+
+    def _rename_participant_dialog(self, p):
+        self._dialog.dismiss()
+        self._rename_field = FormTextField(text=p.name, hint_text=tr("Nuovo nome"))
+        self._dialog = MDDialog(
+            auto_dismiss=False, title=tr("Correggi nome"), type="custom",
+            content_cls=self._rename_field,
+            buttons=[
+                MDFlatButton(text=tr("Annulla"), on_release=lambda *_: self._dialog.dismiss()),
+                MDRaisedButton(text=tr("Salva"), on_release=lambda *_: self._save_rename(p)),
+            ],
+        )
+        self._dialog.open()
+
+    def _save_rename(self, p):
+        app = MDApp.get_running_app()
+        try:
+            core.rename_participant(app.db, app.current_trip.id, p.name, self._rename_field.text)
+        except ValueError as exc:
+            toast(str(exc))
+            return
+        self._dialog.dismiss()
+        self.refresh_all()
+        toast(tr("Nome aggiornato"))
+
+    def _confirm_delete_participant(self, p):
+        self._dialog.dismiss()
+        self._confirm(
+            tr("Eliminare {name} dal viaggio?").format(name=p.name),
+            tr("I suoi movimenti verranno ridistribuiti agli altri partecipanti."),
+            lambda: self._do_delete_participant(p),
+        )
+
+    def _do_delete_participant(self, p):
+        app = MDApp.get_running_app()
+        try:
+            core.delete_participant(app.db, app.current_trip.id, p.name)
+        except ValueError as exc:
+            toast(str(exc))
+            return
+        self.refresh_all()
+        toast(tr("Partecipante eliminato"))
+        if app.sync.is_logged_in():
+            app.run_async(app.sync.sync, lambda _r: None, lambda _e: None)
 
     def add_person(self):
         app = MDApp.get_running_app()

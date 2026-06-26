@@ -236,6 +236,21 @@ class Database:
         ).fetchone()
         return self._row_to_participant(row) if row else None
 
+    def rename_participant(self, participant_id: str, new_name: str) -> None:
+        self.conn.execute(
+            "UPDATE participants SET name = ?, updated_at = ?, dirty = 1 WHERE id = ?",
+            (new_name, now_iso(), participant_id),
+        )
+        self.conn.commit()
+
+    def delete_participant(self, participant_id: str) -> None:
+        """Soft-delete di un partecipante (tombstone per il sync)."""
+        self.conn.execute(
+            "UPDATE participants SET deleted = 1, updated_at = ?, dirty = 1 WHERE id = ?",
+            (now_iso(), participant_id),
+        )
+        self.conn.commit()
+
     # ---- Expense ----------------------------------------------------------
     def add_expense(self, expense: Expense) -> Expense:
         ts = now_iso()
@@ -311,6 +326,20 @@ class Database:
     def list_splits(self, expense_id: str) -> list[Split]:
         """Quote (split) non cancellate di una spesa, una per partecipante."""
         return self._splits_for(expense_id)
+
+    def update_split_share(self, split_id: str, share_base) -> None:
+        self.conn.execute(
+            "UPDATE splits SET share_base = ?, updated_at = ?, dirty = 1 WHERE id = ?",
+            (str(share_base), now_iso(), split_id),
+        )
+        self.conn.commit()
+
+    def soft_delete_split(self, split_id: str) -> None:
+        self.conn.execute(
+            "UPDATE splits SET deleted = 1, updated_at = ?, dirty = 1 WHERE id = ?",
+            (now_iso(), split_id),
+        )
+        self.conn.commit()
 
     # ---- Sincronizzazione -------------------------------------------------
     def dirty_rows(self, table: str) -> list[dict]:

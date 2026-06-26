@@ -14,7 +14,7 @@ from . import __version__, i18n
 from .admin import AdminClient, AdminError
 from .core import (
     SplitSpec, add_expense, add_participant, compute_balance, create_trip,
-    delete_trip, resolve_trip,
+    delete_participant, delete_trip, rename_participant, resolve_trip,
 )
 from .db import Database
 from .models import Balance
@@ -125,6 +125,18 @@ def build_parser() -> argparse.ArgumentParser:
     pe_list = p_person.add_parser("list", help="elenca i partecipanti")
     pe_list.add_argument("--trip", required=True, help="id o nome del viaggio")
     pe_list.set_defaults(func=cmd_person_list)
+
+    pe_rename = p_person.add_parser("rename", help="corregge il nome di un partecipante")
+    pe_rename.add_argument("--trip", required=True, help="id o nome del viaggio")
+    pe_rename.add_argument("--name", required=True, help="nome attuale")
+    pe_rename.add_argument("--new-name", required=True, dest="new_name", help="nuovo nome")
+    pe_rename.set_defaults(func=cmd_person_rename)
+
+    pe_del = p_person.add_parser(
+        "delete", help="elimina un partecipante (movimenti ridistribuiti ai rimanenti)")
+    pe_del.add_argument("--trip", required=True, help="id o nome del viaggio")
+    pe_del.add_argument("--name", required=True, help="nome del partecipante")
+    pe_del.set_defaults(func=cmd_person_delete)
 
     # expense -------------------------------------------------------------
     p_exp = sub.add_parser("expense", help="gestione spese").add_subparsers(
@@ -263,6 +275,17 @@ def cmd_person_list(db: Database, args) -> None:
         return
     for p in people:
         print(p.name)
+
+
+def cmd_person_rename(db: Database, args) -> None:
+    rename_participant(db, args.trip, args.name, args.new_name)
+    print(i18n.tr("Rinominato {old} in {new}").format(old=repr(args.name), new=repr(args.new_name)))
+
+
+def cmd_person_delete(db: Database, args) -> None:
+    p = delete_participant(db, args.trip, args.name)
+    print(i18n.tr("Eliminato {name}; movimenti ridistribuiti ai rimanenti.").format(
+        name=repr(p.name)))
 
 
 def cmd_expense_add(db: Database, args) -> None:
